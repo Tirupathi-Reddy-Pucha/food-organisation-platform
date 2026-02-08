@@ -4,18 +4,38 @@ const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['Donor', 'NGO', 'Volunteer'], default: 'Donor' },
+  role: { type: String, enum: ['Donor', 'NGO', 'Volunteer', 'Admin'], default: 'Donor' },
   
-  // --- NEW FIELDS ---
+  // Contact Info
   phone: { type: String, default: '' },
   address: { type: String, default: '' },
-  // ------------------
-
-  ngoRegNumber: { type: String },
-  createdAt: { type: Date, default: Date.now }, // <--- MAKE SURE THIS IS HERE
   
+  // Verification & Status
+  verificationDocument: { type: String, default: '' },
+  ngoRegNumber: { type: String },
+  isVerified: { type: Boolean, default: false },
   isBanned: { type: Boolean, default: false },
-  date: { type: Date, default: Date.now },
+  
+  // --- FIX: THIS IS THE FIELD YOU NEED ---
+  isAvailable: { type: Boolean, default: false }, 
+  isTrained: { type: Boolean, default: false },
+  credits: { type: Number, default: 0 },
+  servedGroups: { type: String, default: 'General' },
+
+  // NGO Specifics
+  ngoCapacity: {
+    fridge: { type: String, default: '' }, 
+    dryStorage: { type: String, default: '' } 
+  },
+  servedGroups: { type: String, default: 'General' },
+  
+  // Settings
+  notifications: {
+    email: { type: Boolean, default: true },
+    sms: { type: Boolean, default: false }
+  },
+  
+  date: { type: Date, default: Date.now }
 });
 
 export default mongoose.model('User', UserSchema);

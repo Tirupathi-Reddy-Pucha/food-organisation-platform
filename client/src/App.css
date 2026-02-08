@@ -93,3 +93,109 @@ button:active {
   background: #27ae60;
   color: white;
 }
+
+/* --- NEW REAL-TIME & UTILITY STYLES --- */
+
+/* Countdown Timer */
+.countdown-timer {
+  background: #2c3e50;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 0.9em;
+  display: inline-block;
+  margin-top: 5px;
+}
+.countdown-urgent { background: #e74c3c; animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.8; }
+  100% { opacity: 1; }
+}
+
+/* RTL Support */
+.rtl-mode {
+  direction: rtl;
+  text-align: right;
+}
+.rtl-mode .avatar-circle { margin-left: 10px; margin-right: 0; }
+
+/* Safety Popup */
+.safety-modal {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.8); z-index: 2000;
+  display: flex; justify-content: center; align-items: center;
+}
+
+/* --- NEW COMMUNITY & COMPLIANCE STYLES --- */
+
+/* Task 6.5.3: Progress Bar */
+.goal-container {
+  background: #f0f0f0;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+.progress-bar {
+  width: 100%;
+  height: 20px;
+  background-color: #e0e0e0;
+  border-radius: 10px;
+  overflow: hidden;
+  margin-top: 5px;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3498db, #2ecc71);
+  transition: width 0.5s ease-in-out;
+}
+
+/* Task 4.4.4: Packaging Modal */
+.pack-modal {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85); z-index: 2100;
+  display: flex; justify-content: center; align-items: center;
+}
+.pack-content {
+  background: white; padding: 25px; border-radius: 12px; max-width: 400px;
+}
+
+/* --- NEW CONVENIENCE STYLES --- */
+
+/* Certificate Modal */
+.cert-modal {
+  background: white;
+  padding: 40px;
+  text-align: center;
+  border: 10px solid #f1c40f;
+  outline: 5px solid #2c3e50;
+  max-width: 500px;
+  color: #333;
+  font-family: serif;
+}
+.cert-title { font-size: 2em; color: #2c3e50; margin-bottom: 10px; }
+.cert-name { font-size: 2.5em; color: #c0392b; margin: 20px 0; font-weight: bold; border-bottom: 2px solid #ccc; display: inline-block; }
+
+/* Font Size Classes */
+.font-sm { font-size: 14px; }
+.font-md { font-size: 16px; } /* Default */
+.font-lg { font-size: 18px; }
+.font-xl { font-size: 20px; }
+
+/* Address Copy Effect */
+.copy-able { cursor: pointer; border-bottom: 1px dashed #999; }
+.copy-able:active { background-color: #ffffcc; }
+
+/* Dynamic Icon Placeholder */
+.placeholder-icon {
+  width: 100px; height: 100px;
+  background: #f0f0f0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3em;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}

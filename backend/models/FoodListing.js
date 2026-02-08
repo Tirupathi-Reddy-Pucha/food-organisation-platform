@@ -9,12 +9,19 @@ const FoodListingSchema = new mongoose.Schema({
   
   // Expiry & Safety
   expiry_hours: { type: Number, required: true },
+  image: { type: String, default: '' }, // Stores the photo URL
   isVeg: { type: Boolean, default: true },
   requiresRefrigeration: { type: Boolean, default: false },
   isFresh: { type: Boolean, default: false },
   isHygienic: { type: Boolean, default: false },
   hasAllergens: { type: Boolean, default: false },
   temperature: { type: String, enum: ['Hot', 'Cold'], default: 'Hot' },
+  location: {lat: { type: Number , required: true },lng: { type: Number, required: true }},
+  reports: [{reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },reason: String,createdAt: { type: Date, default: Date.now }}],
+  allergens: { type: [String], default: [] }, 
+  handlingInstructions: { type: String, default: '' }, 
+  containerType: { type: String, enum: ['Disposable', 'Returnable'], default: 'Disposable' }, 
+  pickupNote: { type: String, default: '' },
 
   // Relations
   donor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
