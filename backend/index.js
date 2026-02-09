@@ -20,7 +20,10 @@ if (process.env.NODE_ENV !== 'test') {
 
 // 2. Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true,
+}));
 
 // 3. Define Routes
 app.use('/api/auth', authRoutes);

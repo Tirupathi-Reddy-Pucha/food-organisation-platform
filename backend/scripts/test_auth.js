@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-const BASE = 'http://localhost:5000/api/auth';
+const BASE = `${process.env.BASE_URL}/api/auth` || 'http://localhost:5000/api/auth';
 
 async function test() {
   // register

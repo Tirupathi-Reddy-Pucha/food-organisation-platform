@@ -21,7 +21,7 @@ const Register = () => {
     e.preventDefault();
     try {
       // 1. Send data to backend
-      const res = await axios.post('http://localhost:5000/api/auth/register', { ...formData, email: formData.email.toLowerCase() });
+      const res = await axios.post(`${import.meta.env.VITE_API_BASE_URL}/auth/register`, { ...formData, email: formData.email.toLowerCase() });
       
       // 2. SAVE TOKEN AND USER DATA (Crucial Step!)
       localStorage.setItem('token', res.data.token);
