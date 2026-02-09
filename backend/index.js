@@ -13,12 +13,14 @@ dotenv.config();
 
 const app = express();
 
-// 1. Connect Database
-connectDB();
+// 1. Connect Database (skip in test mode)
+if (process.env.NODE_ENV !== 'test') {
+    connectDB();
+}
 
 // 2. Middleware
-app.use(express.json()); 
-app.use(cors()); 
+app.use(express.json());
+app.use(cors());
 
 // 3. Define Routes
 app.use('/api/auth', authRoutes);
@@ -28,4 +30,8 @@ app.use('/api/upload', uploadRoutes);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+if (process.env.NODE_ENV !== 'test') {
+    app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+}
+
+export default app;
