@@ -10,21 +10,21 @@ router.get('/', async (req, res) => {
     try {
         // 1. Count listings that are NOT Cancelled
         const totalDonations = await FoodListing.countDocuments({ status: { $ne: 'Cancelled' } });
-        
+
         // 2. Calculate savings (Assuming avg 0.5kg per meal and 2.5kg CO2 per kg food)
         // We aggregate only Valid donations
         const result = await FoodListing.aggregate([
             { $match: { status: { $ne: 'Cancelled' } } }, // <--- FILTER: Ignore Cancelled
-            { 
-                $group: { 
-                    _id: null, 
-                    totalQty: { $sum: "$quantity" } 
-                } 
+            {
+                $group: {
+                    _id: null,
+                    totalQty: { $sum: "$quantity" }
+                }
             }
         ]);
 
         const totalKg = result.length > 0 ? result[0].totalQty : 0;
-        
+
         // Formulas: 
         // 1 meal ≈ 0.4 kg
         // 1 kg food waste ≈ 2.5 kg CO2
@@ -42,29 +42,32 @@ router.get('/', async (req, res) => {
 // @desc    Get Top 5 Donors (Exclude Cancelled Donations)
 router.get('/leaderboard', async (req, res) => {
     try {
+        const { type } = req.query; // 'donors' or 'volunteers'
+
+        // 1. Determine Match and Group fields based on type
+        const matchStage = { status: { $ne: 'Cancelled' } };
+        let groupField = "$donor";
+
+        if (type === 'volunteers') {
+            matchStage.collectedBy = { $exists: true, $ne: null };
+            matchStage.status = 'Delivered'; // Volunteers only get credit for completed work
+            groupField = "$collectedBy";
+        }
+
         const leaderboard = await FoodListing.aggregate([
-            // 1. FILTER: Only count Valid (Non-Cancelled) donations
-            { $match: { status: { $ne: 'Cancelled' } } }, 
-
-            // 2. GROUP: Count by Donor ID
-            { 
-                $group: { 
-                    _id: "$donor", 
-                    count: { $sum: 1 } 
-                } 
+            { $match: matchStage },
+            {
+                $group: {
+                    _id: groupField,
+                    count: { $sum: 1 }
+                }
             },
-
-            // 3. SORT: Highest count first
             { $sort: { count: -1 } },
-
-            // 4. LIMIT: Top 5 only
-            { $limit: 3 }
+            { $limit: 3 } // Restrict to top 3
         ]);
 
-        // 5. POPULATE: We need the Donor's Name (Aggregation returns only ID)
         const populatedLeaderboard = await User.populate(leaderboard, { path: "_id", select: "name" });
 
-        // Format for Frontend: { name: "John", count: 10 }
         const formatted = populatedLeaderboard.map(item => ({
             name: item._id ? item._id.name : "Unknown",
             count: item.count

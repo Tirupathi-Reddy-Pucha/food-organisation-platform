@@ -13,12 +13,12 @@ const router = express.Router();
 router.get('/admin/reports', auth, async (req, res) => {
     try {
         if (req.user.role !== 'Admin') return res.status(403).json({ msg: 'Access Denied' });
-        
+
         // Find listings where 'reports' array is not empty
         const reportedListings = await FoodListing.find({ reports: { $exists: true, $not: { $size: 0 } } })
             .populate('donor', 'name email')
             .populate('reports.reportedBy', 'name');
-            
+
         res.json(reportedListings);
     } catch (err) {
         console.error(err.message);
@@ -31,7 +31,7 @@ router.get('/', async (req, res) => {
         const { search, category, filterVeg } = req.query;
 
         let query = {};
-        
+
         // Search Logic
         if (search) {
             query.$or = [
@@ -55,7 +55,7 @@ router.get('/', async (req, res) => {
         // FETCH DATA & POPULATE FIELDS
         const listings = await FoodListing.find(query)
             .sort({ date: -1 })
-            .populate('donor', 'name phone address createdAt isVerified') 
+            .populate('donor', 'name phone address createdAt isVerified')
             .populate('claimedBy', 'name phone address ngoRegNumber')
             .populate('collectedBy', 'name phone address');
 
@@ -63,11 +63,11 @@ router.get('/', async (req, res) => {
         const currentTime = Date.now();
         const activeListings = listings.filter(item => {
             const createdTime = new Date(item.createdAt).getTime();
-            const expiryTime = createdTime + (item.expiry_hours * 60 * 60 * 1000); 
+            const expiryTime = createdTime + (item.expiry_hours * 60 * 60 * 1000);
 
             // If item is already claimed/delivered, keep it visible for history
             if (item.status !== 'Available') return true;
-            
+
             // If Available, only show if not expired
             return currentTime < expiryTime;
         });
@@ -90,7 +90,7 @@ router.get('/user/:id', async (req, res) => {
             .populate('donor', 'name phone address createdAt isVerified')
             .populate('claimedBy', 'name phone address ngoRegNumber')
             .populate('collectedBy', 'name phone address');
-            
+
         res.json(listings);
     } catch (err) {
         console.error(err.message);
@@ -109,9 +109,9 @@ router.get('/history', auth, async (req, res) => {
                 { collectedBy: req.user.id }
             ]
         })
-        .populate('donor', 'name phone address isVerified')
-        .populate('claimedBy', 'name phone address')
-        .sort({ createdAt: -1 });
+            .populate('donor', 'name phone address isVerified')
+            .populate('claimedBy', 'name phone address')
+            .sort({ createdAt: -1 });
 
         res.json(history);
     } catch (err) {
@@ -126,14 +126,14 @@ router.get('/history', auth, async (req, res) => {
 // @route   POST /api/listings
 router.post('/', auth, async (req, res) => {
     try {
-        const { 
+        const {
             title, description, quantity, unit, category, expiry_hours,
-            isVeg, requiresRefrigeration, isFresh, isHygienic, 
-            hasAllergens, temperature, image, 
+            isVeg, requiresRefrigeration, isFresh, isHygienic,
+            hasAllergens, temperature, image,
             // Batch 1 Fields
             allergens, handlingInstructions, containerType, pickupNote,
             // Batch 2 Fields (Location)
-            lat, lng 
+            lat, lng
         } = req.body;
 
         // Backend Validation
@@ -160,11 +160,11 @@ router.post('/', auth, async (req, res) => {
             hasAllergens,
             temperature,
             image,
-            
+
             // New Batch 1 Fields
-            allergens, 
-            handlingInstructions, 
-            containerType, 
+            allergens,
+            handlingInstructions,
+            containerType,
             pickupNote,
 
             // New Batch 2 Field (Constructing Location Object)
@@ -194,19 +194,33 @@ router.delete('/:id', auth, async (req, res) => {
         const listing = await FoodListing.findById(req.params.id);
         if (!listing) return res.status(404).json({ msg: 'Listing not found' });
 
-        if (listing.donor.toString() !== req.user.id && req.user.role !== 'Admin') {
-            return res.status(401).json({ msg: 'User not authorized' });
+        const isDonor = listing.donor.toString() === req.user.id;
+        const isAdmin = req.user.role === 'Admin';
+
+        // Expiry check
+        const expiryTime = new Date(listing.createdAt).getTime() + (listing.expiry_hours * 60 * 60 * 1000);
+        const isExpired = Date.now() > expiryTime;
+        const isReported = listing.reports && listing.reports.length > 0;
+
+        if (!isDonor && !isAdmin) {
+            return res.status(401).json({ msg: 'User not authorized.' });
         }
 
-        if (listing.status !== 'Available') {
-            return res.status(400).json({ msg: 'Cannot delete. Item has already been claimed.' });
+        // Admin specifically needs reported or expired status
+        if (isAdmin && !isReported && !isExpired) {
+            return res.status(403).json({ msg: 'Admins can only delete reported or expired items.' });
+        }
+
+        // Donor can only delete if still Available OR if it's expired
+        if (isDonor && !isAdmin && listing.status !== 'Available' && !isExpired) {
+            return res.status(400).json({ msg: 'Cannot delete. Item has already been claimed and is not yet expired.' });
         }
 
         await listing.deleteOne();
         res.json({ msg: 'Listing removed' });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error("DELETE ERROR:", err);
+        res.status(500).json({ msg: 'Server Error: ' + err.message });
     }
 });
 
@@ -216,53 +230,70 @@ router.delete('/:id', auth, async (req, res) => {
 // @route   PUT /api/listings/:id/status
 router.put('/:id/status', auth, async (req, res) => {
     try {
-        const { status, reason } = req.body; 
+        const { status, reason, pickupProof } = req.body;
         let listing = await FoodListing.findById(req.params.id);
-        
+
         if (!listing) return res.status(404).json({ msg: 'Listing not found' });
 
-        listing.status = status;
+        // Logic for Donor marking it as Ready for Pickup
+        if (status === 'ReadyToPickup') {
+            if (listing.donor.toString() !== req.user.id) {
+                return res.status(401).json({ msg: 'Only the donor can mark this as ready.' });
+            }
+            listing.isReadyForPickup = true;
+            console.log(`📡 [SMS ALERT] To Volunteer/NGO: "Food ${listing.title} is ready for pickup! Generate QR now."`);
+        }
 
-        if (status === 'Cancelled') listing.statusReason = reason;
+        if (status === 'Cancelled') listing.cancellationReason = reason;
         if (status === 'Claimed') listing.claimedBy = req.user.id;
-        if (status === 'In Transit') listing.collectedBy = req.user.id;
 
-        if (status === 'Delivered') {
-             // Find the donor and add 10 credits
-             const donorUser = await User.findById(listing.donor);
-             if (donorUser) {
-                 donorUser.credits += 10;
-                 await donorUser.save();
-                 console.log(`🌟 Added 10 credits to donor: ${donorUser.name}`);
-                 console.log("❌ ERROR: Donor not found for credit update.");
-             }
-        }
-
-        if (status === 'Claimed') {
-            listing.claimedBy = req.user.id;
-        } 
-        else if (status === 'In Transit') {
+        // Volunteer picking up with photo proof
+        if (status === 'In Transit') {
+            if (req.user.role === 'Volunteer' && !pickupProof) {
+                return res.status(400).json({ msg: "⚠️ Pickup requires photo proof of QR code." });
+            }
             listing.collectedBy = req.user.id;
+            if (pickupProof) listing.pickupProof = pickupProof;
         }
-        else if (status === 'Cancelled' && reason) {
-            listing.cancellationReason = reason; 
+
+        if (status === 'Delivered' && listing.status !== 'Delivered') {
+            // 1. Reward Donor
+            const updatedDonor = await User.findByIdAndUpdate(listing.donor, { $inc: { credits: 10 } }, { new: true });
+            if (updatedDonor) console.log(`🌟 Donor Credits: ${updatedDonor.credits}`);
+
+            // 2. Reward Volunteer (if exists)
+            if (listing.collectedBy) {
+                const updatedVol = await User.findByIdAndUpdate(listing.collectedBy, { $inc: { credits: 10 } }, { new: true });
+                if (updatedVol) console.log(`🌟 Volunteer Credits: ${updatedVol.credits}`);
+            }
+
+            // 3. Reward NGO (Claimer)
+            if (listing.claimedBy) {
+                const updatedNGO = await User.findByIdAndUpdate(listing.claimedBy, { $inc: { credits: 10 } }, { new: true });
+                if (updatedNGO) console.log(`🌟 NGO Credits: ${updatedNGO.credits}`);
+            }
+        }
+
+        // Final status update
+        if (status !== 'ReadyToPickup') {
+            listing.status = status;
         }
 
         if (status === 'Claimed') {
-             console.log(`📱 [SMS ALERT] To Donor: "Your food ${listing.title} has been claimed by an NGO! Please have it ready."`);
+            console.log(`📱 [SMS ALERT] To Donor: "Your food ${listing.title} has been claimed by an NGO! Please have it ready."`);
         }
         if (status === 'In Transit') {
-             console.log(`📱 [SMS ALERT] To NGO: "A volunteer has picked up ${listing.title}. It is on the way!"`);
+            console.log(`📱 [SMS ALERT] To NGO: "A volunteer has picked up ${listing.title}. It is on the way!"`);
         }
         if (status === 'Delivered') {
-             console.log(`📱 [SMS ALERT] To Donor: "Great news! Your donation has reached its destination."`);
+            console.log(`📱 [SMS ALERT] To Donor: "Great news! Your donation has reached its destination."`);
         }
 
         await listing.save();
         res.json(listing);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error("STATUS UPDATE ERROR:", err);
+        res.status(500).json({ msg: 'Server Error: ' + err.message });
     }
 });
 
@@ -273,7 +304,7 @@ router.put('/:id/status', auth, async (req, res) => {
 router.put('/:id/rate', async (req, res) => {
     try {
         const { rating, feedback } = req.body;
-        
+
         let listing = await FoodListing.findById(req.params.id);
         if (!listing) return res.status(404).json({ msg: 'Listing not found' });
 
@@ -284,9 +315,9 @@ router.put('/:id/rate', async (req, res) => {
 
         // Check if Donor needs banning
         if (listing.donor) {
-            const donorId = listing.donor; 
+            const donorId = listing.donor;
             const donorListings = await FoodListing.find({ donor: donorId, rating: { $gt: 0 } });
-            
+
             if (donorListings.length > 0) {
                 const totalRating = donorListings.reduce((sum, item) => sum + item.rating, 0);
                 const avgRating = totalRating / donorListings.length;
@@ -297,7 +328,7 @@ router.put('/:id/rate', async (req, res) => {
                 }
             }
         }
-        
+
         res.json(listing);
     } catch (err) {
         console.error("Rate Error:", err.message);
@@ -313,7 +344,7 @@ router.post('/:id/report', auth, async (req, res) => {
     try {
         const { reason } = req.body;
         const listing = await FoodListing.findById(req.params.id);
-        
+
         if (!listing) return res.status(404).json({ msg: 'Listing not found' });
 
         // Add report
