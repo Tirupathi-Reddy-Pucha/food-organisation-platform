@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
-import auth from '../middlewares/auth.js'; 
+import auth from '../middlewares/auth.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -19,10 +19,10 @@ router.post('/register', async (req, res) => {
         let user = await User.findOne({ email });
         if (user) return res.status(400).json({ msg: 'User already exists' });
 
-        user = new User({ 
-            name, 
-            email, 
-            password, 
+        user = new User({
+            name,
+            email,
+            password,
             role,
             phone,
             address,
@@ -65,7 +65,13 @@ router.post('/login', async (req, res) => {
         }
 
         if (user.isBanned) return res.status(403).json({ msg: '🚫 Your account has been banned.' });
-        if (user.isActive === false) return res.status(403).json({ msg: 'Account deactivated.' }); 
+
+        // Auto-reactivate if account was deactivated
+        if (user.isActive === false) {
+            user.isActive = true;
+            await user.save();
+            console.log(`♻️ Account Reactivated: ${email}`);
+        }
 
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
@@ -74,23 +80,23 @@ router.post('/login', async (req, res) => {
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' }, (err, token) => {
             if (err) throw err;
             // Send back all necessary fields
-            res.json({ 
-                token, 
-                user: { 
-                    id: user.id, 
-                    name: user.name, 
-                    role: user.role, 
-                    phone: user.phone, 
-                    address: user.address, 
-                    isVerified: user.isVerified, 
-                    isTrained: user.isTrained, 
+            res.json({
+                token,
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    role: user.role,
+                    phone: user.phone,
+                    address: user.address,
+                    isVerified: user.isVerified,
+                    isTrained: user.isTrained,
                     isAvailable: user.isAvailable, // <--- Important for Volunteer Toggle
                     credits: user.credits,
                     servedGroups: user.servedGroups,
-                    ngoCapacity: user.ngoCapacity, 
-                    notifications: user.notifications, 
-                    verificationDocument: user.verificationDocument 
-                } 
+                    ngoCapacity: user.ngoCapacity,
+                    notifications: user.notifications,
+                    verificationDocument: user.verificationDocument
+                }
             });
         });
     } catch (err) {
@@ -119,8 +125,8 @@ router.get('/me', auth, async (req, res) => {
 // @route   PUT /api/auth/update
 router.put('/update', auth, async (req, res) => {
     try {
-        const { 
-            name, phone, address, ngoCapacity, notifications, verificationDocument, 
+        const {
+            name, phone, address, ngoCapacity, notifications, verificationDocument,
             isAvailable, servedGroups // <--- Extract isAvailable
         } = req.body;
 
@@ -136,7 +142,7 @@ router.put('/update', auth, async (req, res) => {
         if (servedGroups) user.servedGroups = servedGroups;
         if (notifications) user.notifications = notifications;
         if (verificationDocument) user.verificationDocument = verificationDocument;
-        
+
         // 3. Update Boolean Toggle (Check undefined because false is a valid value)
         if (isAvailable !== undefined) {
             user.isAvailable = isAvailable;
@@ -172,13 +178,13 @@ router.get('/all-users', auth, async (req, res) => {
 router.put('/verify/:id', auth, async (req, res) => {
     try {
         if (req.user.role !== 'Admin') return res.status(403).json({ msg: "Access Denied" });
-        
+
         const user = await User.findByIdAndUpdate(
-            req.params.id, 
-            { isVerified: true }, 
+            req.params.id,
+            { isVerified: true },
             { new: true }
         ).select('-password');
-        
+
         res.json(user);
     } catch (err) {
         console.error(err.message);
@@ -197,7 +203,7 @@ router.put('/train', auth, async (req, res) => {
             { isTrained: true },
             { new: true }
         ).select('-password');
-        
+
         res.json(user);
     } catch (err) {
         console.error(err.message);
@@ -225,6 +231,40 @@ router.delete('/delete', auth, async (req, res) => {
         await User.findByIdAndDelete(req.user.id);
         res.json({ msg: "User Deleted" });
     } catch (err) {
+        res.status(500).send('Server Error');
+    }
+});
+
+
+// ==========================================
+// ADMIN: UNBAN USER
+// ==========================================
+// @route   PUT /api/auth/admin/unban/:userId
+router.put('/admin/unban/:userId', auth, async (req, res) => {
+    try {
+        // Check if requester is admin
+        if (req.user.role !== 'Admin') {
+            return res.status(403).json({ msg: 'Access Denied. Admin only.' });
+        }
+
+        const userId = req.params.userId;
+        const user = await User.findById(userId);
+        
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        // Unban the user
+        await User.findByIdAndUpdate(userId, {
+            isBanned: false,
+            banReason: '',
+            bannedAt: null
+        });
+
+        console.log(` Admin ${req.user.id} unbanned user ${userId}`);
+        res.json({ msg: 'User has been unbanned successfully', user: { id: user.id, name: user.name } });
+    } catch (err) {
+        console.error('Unban Error:', err);
         res.status(500).send('Server Error');
     }
 });

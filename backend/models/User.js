@@ -15,6 +15,9 @@ const UserSchema = new mongoose.Schema({
   ngoRegNumber: { type: String },
   isVerified: { type: Boolean, default: false },
   isBanned: { type: Boolean, default: false },
+  banReason: { type: String, default: '' },
+  bannedAt: { type: Date },
+  isActive: { type: Boolean, default: true },
 
   // --- FIX: THIS IS THE FIELD YOU NEED ---
   isAvailable: { type: Boolean, default: false },

@@ -10,7 +10,20 @@
 
 <body>
   <div id="root"></div>
-  <div id="root"></div>
+  <script type="text/javascript">
+    function googleTranslateElementInit() {
+      if (document.getElementById('google_translate_element')) {
+        new google.translate.TranslateElement({
+          pageLanguage: 'en',
+          includedLanguages: 'en,hi,mr,bn,ta,te',
+          layout: google.translate.TranslateElement.InlineLayout.HORIZONTAL,
+          autoDisplay: false
+        }, 'google_translate_element');
+      }
+    }
+  </script>
+  <script type="text/javascript"
+    src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 

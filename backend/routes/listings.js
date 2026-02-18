@@ -45,11 +45,13 @@ router.get('/', async (req, res) => {
             query.category = category;
         }
 
-        // Veg/Non-Veg Filter
+        // Dietary Type Filter
         if (filterVeg === 'Veg') {
-            query.isVeg = true;
+            query.dietaryType = 'Veg';
         } else if (filterVeg === 'Non-Veg') {
-            query.isVeg = false;
+            query.dietaryType = 'Non-Veg';
+        } else if (filterVeg === 'Vegan') {
+            query.dietaryType = 'Vegan';
         }
 
         // FETCH DATA & POPULATE FIELDS
@@ -128,7 +130,7 @@ router.post('/', auth, async (req, res) => {
     try {
         const {
             title, description, quantity, unit, category, expiry_hours,
-            isVeg, requiresRefrigeration, isFresh, isHygienic,
+            dietaryType, isVeg, requiresRefrigeration, isFresh, isHygienic,
             hasAllergens, temperature, image,
             // Batch 1 Fields
             allergens, handlingInstructions, containerType, pickupNote,
@@ -136,14 +138,22 @@ router.post('/', auth, async (req, res) => {
             lat, lng
         } = req.body;
 
+        // Backward compatibility for tests/older frontend
+        const finalDietaryType = dietaryType || (isVeg ? 'Veg' : 'Non-Veg');
+
         // Backend Validation
         if (quantity <= 0) return res.status(400).json({ msg: "⚠️ Quantity must be positive." });
         if (expiry_hours <= 0) return res.status(400).json({ msg: "⚠️ Expiry time must be valid." });
 
-        // Check Ban Status
+        // Check Verification & Ban Status
         const user = await User.findById(req.user.id);
+        if (!user.isVerified) {
+            return res.status(403).json({ msg: "🔒 Account verification pending. Please wait for admin approval." });
+        }
         if (user.isBanned) {
-            return res.status(403).json({ msg: "🚫 You are BANNED due to low ratings." });
+            return res.status(403).json({
+                msg: `Your account has been suspended due to ${user.banReason}. Please contact an administrator for assistance.`
+            });
         }
 
         const newListing = new FoodListing({
@@ -153,7 +163,7 @@ router.post('/', auth, async (req, res) => {
             unit,
             category,
             expiry_hours,
-            isVeg,
+            dietaryType: finalDietaryType,
             requiresRefrigeration,
             isFresh,
             isHygienic,
@@ -178,6 +188,67 @@ router.post('/', auth, async (req, res) => {
         });
 
         const listing = await newListing.save();
+        res.json(listing);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// ==========================================
+// 3.1 UPDATE LISTING (For Donors)
+// ==========================================
+// @route   PUT /api/listings/:id
+router.put('/:id', auth, async (req, res) => {
+    try {
+        const {
+            title, description, quantity, unit, category, expiry_hours,
+            dietaryType, isVeg, requiresRefrigeration, isFresh, isHygienic,
+            hasAllergens, temperature, image,
+            allergens, handlingInstructions, containerType, pickupNote,
+            accessCode, lat, lng
+        } = req.body;
+
+        const finalDietaryType = dietaryType || (isVeg ? 'Veg' : 'Non-Veg');
+
+        let listing = await FoodListing.findById(req.params.id);
+        if (!listing) return res.status(404).json({ msg: 'Listing not found' });
+
+        // Authorization check
+        if (listing.donor.toString() !== req.user.id) {
+            return res.status(401).json({ msg: 'User not authorized' });
+        }
+
+        // Only allow edits if status is Available
+        if (listing.status !== 'Available') {
+            return res.status(400).json({ msg: 'Cannot edit once claimed.' });
+        }
+
+        // Update fields
+        listing.title = title || listing.title;
+        listing.description = description || listing.description;
+        listing.quantity = quantity || listing.quantity;
+        listing.unit = unit || listing.unit;
+        listing.category = category || listing.category;
+        listing.expiry_hours = expiry_hours || listing.expiry_hours;
+        listing.dietaryType = finalDietaryType || listing.dietaryType;
+        listing.requiresRefrigeration = requiresRefrigeration !== undefined ? requiresRefrigeration : listing.requiresRefrigeration;
+        listing.isFresh = isFresh !== undefined ? isFresh : listing.isFresh;
+        listing.isHygienic = isHygienic !== undefined ? isHygienic : listing.isHygienic;
+        listing.hasAllergens = hasAllergens !== undefined ? hasAllergens : listing.hasAllergens;
+        listing.temperature = temperature || listing.temperature;
+        listing.image = image || listing.image;
+        listing.allergens = allergens || listing.allergens;
+        listing.handlingInstructions = handlingInstructions || listing.handlingInstructions;
+        listing.containerType = containerType || listing.containerType;
+        listing.pickupNote = pickupNote || listing.pickupNote;
+        listing.accessCode = accessCode || listing.accessCode;
+
+        if (lat && lng) {
+            listing.location = { lat: parseFloat(lat), lng: parseFloat(lng) };
+        }
+
+        await listing.save();
         res.json(listing);
     } catch (err) {
         console.error(err.message);
@@ -234,6 +305,12 @@ router.put('/:id/status', auth, async (req, res) => {
         let listing = await FoodListing.findById(req.params.id);
 
         if (!listing) return res.status(404).json({ msg: 'Listing not found' });
+
+        // Check verification for critical actions
+        const user = await User.findById(req.user.id);
+        if (!user.isVerified) {
+            return res.status(403).json({ msg: "🔒 Account verification pending. Please wait for admin approval." });
+        }
 
         // Logic for Donor marking it as Ready for Pickup
         if (status === 'ReadyToPickup') {
@@ -313,20 +390,10 @@ router.put('/:id/rate', async (req, res) => {
 
         await listing.save();
 
-        // Check if Donor needs banning
+        // ✨ Auto-ban check after rating submission
         if (listing.donor) {
-            const donorId = listing.donor;
-            const donorListings = await FoodListing.find({ donor: donorId, rating: { $gt: 0 } });
-
-            if (donorListings.length > 0) {
-                const totalRating = donorListings.reduce((sum, item) => sum + item.rating, 0);
-                const avgRating = totalRating / donorListings.length;
-
-                if (donorListings.length >= 3 && avgRating < 2.0) {
-                    await User.findByIdAndUpdate(donorId, { isBanned: true });
-                    console.log(`User ${donorId} has been banned due to low rating: ${avgRating}`);
-                }
-            }
+            const { checkAndApplyBan } = await import('../utils/banCheck.js');
+            await checkAndApplyBan(listing.donor.toString());
         }
 
         res.json(listing);

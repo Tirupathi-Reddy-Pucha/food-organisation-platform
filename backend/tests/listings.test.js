@@ -30,7 +30,8 @@ describe('Listings Routes - Integration Tests', () => {
             password: hashedPassword,
             role: 'Donor',
             phone: '1234567890',
-            address: 'Test Address'
+            address: 'Test Address',
+            isVerified: true
         });
 
         // Generate a real JWT token

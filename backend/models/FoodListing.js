@@ -5,12 +5,12 @@ const FoodListingSchema = new mongoose.Schema({
   description: { type: String },
   quantity: { type: Number, required: true },
   unit: { type: String, default: 'kg' },
-  category: { type: String, enum: ['Cooked', 'Raw', 'Bakery'], default: 'Cooked' },
+  category: { type: String, enum: ['Cooked', 'Raw', 'Bakery', 'Cooked Meal', 'Raw Ingredients', 'Bakery Item'], default: 'Cooked' },
 
   // Expiry & Safety
   expiry_hours: { type: Number, required: true },
   image: { type: String, default: '' }, // Stores the photo URL
-  isVeg: { type: Boolean, default: true },
+  dietaryType: { type: String, enum: ['Veg', 'Non-Veg', 'Vegan'], default: 'Veg' },
   requiresRefrigeration: { type: Boolean, default: false },
   isFresh: { type: Boolean, default: false },
   isHygienic: { type: Boolean, default: false },
