@@ -8,6 +8,9 @@ import authRoutes from './routes/auth.js';
 import listingRoutes from './routes/listings.js';
 import statsRoutes from './routes/stats.js';
 import uploadRoutes from './routes/upload.js';
+import bugRoutes from './routes/bugs.js';
+import notificationRoutes from './routes/notifications.js';
+import foodNeedRoutes from './routes/foodNeeds.js';
 
 dotenv.config();
 
@@ -30,6 +33,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/listings', listingRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/bugs', bugRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/food-needs', foodNeedRoutes);
 
 const PORT = process.env.PORT || 5000;
 

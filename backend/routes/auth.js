@@ -14,7 +14,8 @@ const router = express.Router();
 // @route   POST /api/auth/register
 router.post('/register', async (req, res) => {
     try {
-        const { name, email, password, role, phone, address, ngoRegNumber } = req.body;
+        // ADDED location and serviceRadius
+        const { name, email, password, role, phone, address, ngoRegNumber, location, serviceRadius } = req.body;
 
         let user = await User.findOne({ email });
         if (user) return res.status(400).json({ msg: 'User already exists' });
@@ -26,7 +27,9 @@ router.post('/register', async (req, res) => {
             role,
             phone,
             address,
-            ngoRegNumber
+            ngoRegNumber,
+            location,          // NEW
+            serviceRadius      // NEW
         });
 
         const salt = await bcrypt.genSalt(10);
@@ -95,7 +98,10 @@ router.post('/login', async (req, res) => {
                     servedGroups: user.servedGroups,
                     ngoCapacity: user.ngoCapacity,
                     notifications: user.notifications,
-                    verificationDocument: user.verificationDocument
+                    verificationDocument: user.verificationDocument,
+                    streakCount: user.streakCount,
+                    badges: user.badges || [], // NEW
+                    totalDeliveries: user.totalDeliveries || 0 // NEW
                 }
             });
         });
@@ -127,7 +133,7 @@ router.put('/update', auth, async (req, res) => {
     try {
         const {
             name, phone, address, ngoCapacity, notifications, verificationDocument,
-            isAvailable, servedGroups // <--- Extract isAvailable
+            isAvailable, servedGroups, volunteerSchedule, location, serviceRadius
         } = req.body;
 
         // 1. Find User First
@@ -142,6 +148,10 @@ router.put('/update', auth, async (req, res) => {
         if (servedGroups) user.servedGroups = servedGroups;
         if (notifications) user.notifications = notifications;
         if (verificationDocument) user.verificationDocument = verificationDocument;
+
+        // NEW: Update Map Fields
+        if (location) user.location = location;
+        if (serviceRadius !== undefined) user.serviceRadius = serviceRadius;
 
         // 3. Update Boolean Toggle (Check undefined because false is a valid value)
         if (isAvailable !== undefined) {
@@ -249,7 +259,7 @@ router.put('/admin/unban/:userId', auth, async (req, res) => {
 
         const userId = req.params.userId;
         const user = await User.findById(userId);
-        
+
         if (!user) {
             return res.status(404).json({ msg: 'User not found' });
         }

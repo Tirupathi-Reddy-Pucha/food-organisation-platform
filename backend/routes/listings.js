@@ -2,6 +2,9 @@ import express from 'express';
 import auth from '../middlewares/auth.js';
 import FoodListing from '../models/FoodListing.js';
 import User from '../models/User.js';
+import Notification from '../models/Notification.js';
+import { calculateDistance } from '../utils/haversine.js';
+import { checkMatchesForListing } from '../utils/matchingEngine.js';
 
 const router = express.Router();
 
@@ -135,7 +138,9 @@ router.post('/', auth, async (req, res) => {
             // Batch 1 Fields
             allergens, handlingInstructions, containerType, pickupNote,
             // Batch 2 Fields (Location)
-            lat, lng
+            lat, lng,
+            // NEW: Time Pickers
+            timePrepared, bestBefore
         } = req.body;
 
         // Backward compatibility for tests/older frontend
@@ -184,10 +189,74 @@ router.post('/', auth, async (req, res) => {
             },
 
             donor: req.user.id,
-            status: 'Available'
+            status: 'Available',
+            timePrepared,
+            bestBefore
         });
 
         const listing = await newListing.save();
+
+        // --- STREAK LOGIC ---
+        if (user.role === 'Donor') {
+            const now = new Date();
+            const lastDate = user.lastListingDate ? new Date(user.lastListingDate) : null;
+
+            if (!lastDate) {
+                // First ever listing
+                user.streakCount = 1;
+            } else {
+                const diffTime = Math.abs(now - lastDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                if (diffDays <= 7) {
+                    // Listed within a week. 
+                    // To prevent spamming streak in one day, we only increment if it's a different day.
+                    const isSameDay = now.toDateString() === lastDate.toDateString();
+                    if (!isSameDay) {
+                        user.streakCount += 1;
+                    }
+                } else {
+                    // Missed a week, reset to 1
+                    user.streakCount = 1;
+                }
+            }
+            user.lastListingDate = now;
+            await user.save();
+        }
+
+        // --- GEOFENCING NOTIFICATIONS FOR NGOs ---
+        if (lat && lng) {
+            try {
+                const ngos = await User.find({ role: 'NGO', isVerified: true });
+                const nearbyNGOs = ngos.filter(ngo => {
+                    if (ngo.location && ngo.location.lat && ngo.location.lng) {
+                        const dist = calculateDistance(lat, lng, ngo.location.lat, ngo.location.lng);
+                        return dist <= 5; // 5km radius
+                    }
+                    return false;
+                });
+
+                // Batch create notifications
+                const notificationPromises = nearbyNGOs.map(ngo => {
+                    return new Notification({
+                        recipient: ngo._id,
+                        msg: `📍 New food donation nearby: "${title}" is available within 5km!`,
+                        type: 'Info'
+                    }).save();
+                });
+
+                await Promise.all(notificationPromises);
+                if (nearbyNGOs.length > 0) {
+                    console.log(`📡 Geofencing: Notified ${nearbyNGOs.length} NGOs within 5km.`);
+                }
+            } catch (notifyErr) {
+                console.error("Geofencing notification failed:", notifyErr);
+            }
+        }
+
+        // --- MATCHING ENGINE ---
+        await checkMatchesForListing(listing);
+
         res.json(listing);
     } catch (err) {
         console.error(err.message);
@@ -206,7 +275,8 @@ router.put('/:id', auth, async (req, res) => {
             dietaryType, isVeg, requiresRefrigeration, isFresh, isHygienic,
             hasAllergens, temperature, image,
             allergens, handlingInstructions, containerType, pickupNote,
-            accessCode, lat, lng
+            accessCode, lat, lng,
+            timePrepared, bestBefore
         } = req.body;
 
         const finalDietaryType = dietaryType || (isVeg ? 'Veg' : 'Non-Veg');
@@ -243,6 +313,8 @@ router.put('/:id', auth, async (req, res) => {
         listing.containerType = containerType || listing.containerType;
         listing.pickupNote = pickupNote || listing.pickupNote;
         listing.accessCode = accessCode || listing.accessCode;
+        if (timePrepared) listing.timePrepared = timePrepared;
+        if (bestBefore) listing.bestBefore = bestBefore;
 
         if (lat && lng) {
             listing.location = { lat: parseFloat(lat), lng: parseFloat(lng) };
@@ -312,6 +384,13 @@ router.put('/:id/status', auth, async (req, res) => {
             return res.status(403).json({ msg: "🔒 Account verification pending. Please wait for admin approval." });
         }
 
+        // ✨ Safety Training Check for Volunteers
+        if (req.user.role === 'Volunteer' && (status === 'Claimed' || status === 'In Transit')) {
+            if (!user.isTrained) {
+                return res.status(403).json({ msg: "🎓 Safety training required. Please complete the module on your dashboard." });
+            }
+        }
+
         // Logic for Donor marking it as Ready for Pickup
         if (status === 'ReadyToPickup') {
             if (listing.donor.toString() !== req.user.id) {
@@ -319,6 +398,15 @@ router.put('/:id/status', auth, async (req, res) => {
             }
             listing.isReadyForPickup = true;
             console.log(`📡 [SMS ALERT] To Volunteer/NGO: "Food ${listing.title} is ready for pickup! Generate QR now."`);
+
+            // UI Notification for NGO
+            if (listing.claimedBy) {
+                await new Notification({
+                    recipient: listing.claimedBy,
+                    msg: `🍴 Food listing "${listing.title}" is ready for pickup!`,
+                    type: 'Info'
+                }).save();
+            }
         }
 
         if (status === 'Cancelled') listing.cancellationReason = reason;
@@ -338,10 +426,47 @@ router.put('/:id/status', auth, async (req, res) => {
             const updatedDonor = await User.findByIdAndUpdate(listing.donor, { $inc: { credits: 10 } }, { new: true });
             if (updatedDonor) console.log(`🌟 Donor Credits: ${updatedDonor.credits}`);
 
-            // 2. Reward Volunteer (if exists)
+            // 2. Reward Volunteer (if exists) & Badge Calculation
             if (listing.collectedBy) {
-                const updatedVol = await User.findByIdAndUpdate(listing.collectedBy, { $inc: { credits: 10 } }, { new: true });
-                if (updatedVol) console.log(`🌟 Volunteer Credits: ${updatedVol.credits}`);
+                const volUser = await User.findById(listing.collectedBy);
+                if (volUser) {
+                    volUser.credits += 10;
+                    volUser.totalDeliveries += 1;
+
+                    const now = new Date();
+                    const hour = now.getHours();
+                    const day = now.getDay(); // 0 = Sun, 6 = Sat
+
+                    const newBadges = [];
+
+                    // Night Owl: After 8 PM (20:00)
+                    if (hour >= 20 || hour < 5) {
+                        if (!volUser.badges.includes('Night Owl')) newBadges.push('Night Owl');
+                    }
+
+                    // Early Bird: Before 9 AM
+                    if (hour >= 5 && hour < 9) {
+                        if (!volUser.badges.includes('Early Bird')) newBadges.push('Early Bird');
+                    }
+
+                    // Weekend Warrior: Sat or Sun
+                    if (day === 0 || day === 6) {
+                        if (!volUser.badges.includes('Weekend Warrior')) newBadges.push('Weekend Warrior');
+                    }
+
+                    // Community Hero: 10+ Deliveries
+                    if (volUser.totalDeliveries >= 10) {
+                        if (!volUser.badges.includes('Community Hero')) newBadges.push('Community Hero');
+                    }
+
+                    if (newBadges.length > 0) {
+                        volUser.badges = [...volUser.badges, ...newBadges];
+                        console.log(`🏅 New Badges for ${volUser.name}: ${newBadges.join(', ')}`);
+                    }
+
+                    await volUser.save();
+                    console.log(`🌟 Volunteer Credits: ${volUser.credits}, Deliveries: ${volUser.totalDeliveries}`);
+                }
             }
 
             // 3. Reward NGO (Claimer)
@@ -358,12 +483,38 @@ router.put('/:id/status', auth, async (req, res) => {
 
         if (status === 'Claimed') {
             console.log(`📱 [SMS ALERT] To Donor: "Your food ${listing.title} has been claimed by an NGO! Please have it ready."`);
+            const claimer = await User.findById(req.user.id);
+            await new Notification({
+                recipient: listing.donor,
+                msg: `✅ Your donation "${listing.title}" has been claimed by ${claimer ? claimer.name : 'an NGO'}.`,
+                type: 'Success'
+            }).save();
         }
         if (status === 'In Transit') {
             console.log(`📱 [SMS ALERT] To NGO: "A volunteer has picked up ${listing.title}. It is on the way!"`);
+            if (listing.claimedBy) {
+                await new Notification({
+                    recipient: listing.claimedBy,
+                    msg: `🚚 A volunteer has picked up "${listing.title}". It's on the way!`,
+                    type: 'Info'
+                }).save();
+            }
         }
         if (status === 'Delivered') {
             console.log(`📱 [SMS ALERT] To Donor: "Great news! Your donation has reached its destination."`);
+            await new Notification({
+                recipient: listing.donor,
+                msg: `🎉 Your donation "${listing.title}" has been successfully delivered!`,
+                type: 'Success'
+            }).save();
+
+            if (listing.claimedBy) {
+                await new Notification({
+                    recipient: listing.claimedBy,
+                    msg: `🍽️ The food "${listing.title}" has been delivered to your location.`,
+                    type: 'Success'
+                }).save();
+            }
         }
 
         await listing.save();

@@ -10,7 +10,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   const navigate = useNavigate();
   const API_URL = `${import.meta.env.VITE_API_BASE_URL}` || "http://localhost:5000/api";
 
@@ -21,7 +21,7 @@ export default function Login() {
 
     try {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
-      
+
       // Store user data in local storage matching your Dashboard's expectations
       const { user, token } = res.data;
       localStorage.setItem('token', token);
@@ -39,10 +39,16 @@ export default function Login() {
       localStorage.setItem('user_capacity', JSON.stringify(user.ngoCapacity || {}));
       localStorage.setItem('user_notifs', JSON.stringify(user.notifications || {}));
       localStorage.setItem('user_servedGroups', user.servedGroups || 'General');
+      localStorage.setItem('user_banned', user.isBanned || false);
+      localStorage.setItem('user_banReason', user.banReason || '');
+      if (user.createdAt) localStorage.setItem('user_createdAt', user.createdAt);
+      if (user.streakCount !== undefined) localStorage.setItem('user_streak', user.streakCount);
+      if (user.badges) localStorage.setItem('user_badges', JSON.stringify(user.badges));
+      if (user.totalDeliveries !== undefined) localStorage.setItem('user_totalDeliveries', user.totalDeliveries);
 
       // Navigate to dashboard and refresh to update navbar state
       navigate('/dashboard');
-      window.location.reload(); 
+      window.location.reload();
 
     } catch (err) {
       console.error("Login failed:", err);
@@ -60,7 +66,7 @@ export default function Login() {
           <ArrowLeft size={16} className="mr-2" /> Back to Home
         </Link>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
@@ -82,8 +88,8 @@ export default function Login() {
           <form onSubmit={handleLogin} className="space-y-6">
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -101,8 +107,8 @@ export default function Login() {
                 </button>
               </div>
               <div className="relative">
-                <input 
-                  type={showPassword ? "text" : "password"} 
+                <input
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -110,7 +116,7 @@ export default function Login() {
                   className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all pr-12 disabled:opacity-50"
                   placeholder="••••••••"
                 />
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
@@ -120,8 +126,8 @@ export default function Login() {
               </div>
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={isLoading}
               className="w-full flex items-center justify-center bg-emerald-800 hover:bg-emerald-900 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-900/20 transition-all hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0"
             >
@@ -143,9 +149,9 @@ export default function Login() {
       <div className="hidden lg:flex w-1/2 bg-emerald-900 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-emerald-800 rounded-full blur-3xl opacity-50 translate-x-1/3 -translate-y-1/3"></div>
         <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-950 rounded-full blur-3xl opacity-50 -translate-x-1/3 translate-y-1/3"></div>
-        <img 
-          src="https://images.unsplash.com/photo-1593113565214-80afcb4a45d7?q=80&w=2070&auto=format&fit=crop" 
-          alt="Food Donation" 
+        <img
+          src="https://images.unsplash.com/photo-1593113565214-80afcb4a45d7?q=80&w=2070&auto=format&fit=crop"
+          alt="Food Donation"
           className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-60"
         />
         <div className="relative z-10 p-16 flex flex-col justify-end h-full">
