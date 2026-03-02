@@ -117,6 +117,16 @@ export default function Dashboard() {
     const [isEditingListing, setIsEditingListing] = useState(null);
     const [leaderboardTab, setLeaderboardTab] = useState('donors');
     const [activeRating, setActiveRating] = useState({ id: null, stars: 0, feedback: '' });
+
+    // Voice Confirmation State
+    const [voiceConfirmation, setVoiceConfirmation] = useState({
+        isOpen: false,
+        text: '',
+        parsedData: null,
+        onConfirm: null,
+        timeoutId: null,
+        countdown: 5
+    });
     const [isReportingBug, setIsReportingBug] = useState(false);
     const [bugContent, setBugContent] = useState('');
 
@@ -344,29 +354,179 @@ export default function Dashboard() {
         localStorage.setItem('draft_form', JSON.stringify({ title: foodTitle, desc: foodDesc, qty: foodQty, expiry: foodExpiry, unit: foodUnit, cat: foodCat, dietaryType, reqFridge, temp: temperature, handling: handlingInstructions }));
     }, [foodTitle, foodDesc, foodQty, foodExpiry, foodUnit, foodCat, dietaryType, reqFridge, temperature, handlingInstructions]);
 
-    const startVoiceInput = () => {
-        if (!('webkitSpeechRecognition' in window)) return alert("Voice not supported in this browser.");
-        const recognition = new window.webkitSpeechRecognition();
+    const handleVoiceInput = (setter, append = false, startMsg = "🎤 Listening...", successMsg = "🎤 Voice Input Captured!", isComplex = false) => {
+        if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+            return showToast("Voice input not supported in this browser.", "error");
+        }
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+
+        // Optimizing for noisy kitchens
         recognition.lang = 'en-US';
-        recognition.onresult = (event) => {
-            setFoodTitle(event.results[0][0].transcript);
-            showToast("🎤 Voice Input Captured!");
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.maxAlternatives = 1;
+
+        if (startMsg) showToast(startMsg, "info");
+
+        let finalTranscript = '';
+        let interimTranscript = '';
+        let silenceTimer = null;
+        let isProcessing = false; // Prevent multiple dispatches
+
+        const processTranscription = (text) => {
+            if (isProcessing || !text.trim()) return;
+            isProcessing = true;
+            try { recognition.stop(); } catch (e) { }
+
+            if (isComplex) {
+                // Complex inputs (Quantity + Title) go through confirmation modal
+                triggerVoiceConfirmation(text.trim(), setter);
+            } else {
+                // Simple inputs process immediately
+                if (append) {
+                    setter(prev => prev ? prev + " " + text.trim() : text.trim());
+                } else {
+                    setter(text.trim());
+                }
+                if (successMsg) showToast(successMsg, "success");
+            }
         };
+
+        recognition.onresult = (event) => {
+            interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + " ";
+                } else {
+                    interimTranscript += event.results[i][0].transcript;
+                }
+            }
+
+            // Reset the silence timer every time the microphone picks up a sound
+            if (silenceTimer) clearTimeout(silenceTimer);
+
+            // Wait for 3 seconds of complete silence before declaring the user finished
+            silenceTimer = setTimeout(() => {
+                processTranscription(finalTranscript + interimTranscript);
+            }, 3000);
+        };
+
+        // Fallback: Hard stop after 15 seconds no matter what
+        setTimeout(() => {
+            if (!isProcessing && (finalTranscript || interimTranscript)) {
+                if (silenceTimer) clearTimeout(silenceTimer);
+                processTranscription(finalTranscript + interimTranscript);
+            }
+        }, 15000);
+
         recognition.start();
     };
 
-    const startBugVoiceInput = () => {
-        if (!('webkitSpeechRecognition' in window)) return alert("Voice not supported in this browser.");
-        const recognition = new window.webkitSpeechRecognition();
-        recognition.lang = 'en-US';
-        showToast("🎤 Listening for bug details...", "info");
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            setBugContent(transcript);
-            showToast("🎤 Bug Details Captured!");
-        };
-        recognition.start();
+    const triggerVoiceConfirmation = (transcript, onConfirmCallback) => {
+        // Speak the transcript
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(`Did you say: ${transcript}?`);
+            window.speechSynthesis.speak(utterance);
+        }
+
+        // Setup the confirmation state
+        setVoiceConfirmation({
+            isOpen: true,
+            text: transcript,
+            onConfirm: onConfirmCallback,
+            parsedData: null,
+            timeoutId: null,
+            countdown: 5
+        });
     };
+
+    // Countdown effect for the voice confirmation modal
+    useEffect(() => {
+        if (voiceConfirmation.isOpen && voiceConfirmation.countdown > 0) {
+            const timer = setTimeout(() => {
+                setVoiceConfirmation(prev => ({ ...prev, countdown: prev.countdown - 1 }));
+            }, 1000);
+            return () => clearTimeout(timer);
+        } else if (voiceConfirmation.isOpen && voiceConfirmation.countdown === 0) {
+            // Auto-confirm when countdown reaches 0
+            confirmVoiceInput();
+        }
+    }, [voiceConfirmation.isOpen, voiceConfirmation.countdown]);
+
+    const confirmVoiceInput = () => {
+        if (voiceConfirmation.onConfirm) {
+            voiceConfirmation.onConfirm(voiceConfirmation.text);
+            showToast("🎤 Input Confirmed!", "success");
+        }
+        closeVoiceConfirmation();
+    };
+
+    const closeVoiceConfirmation = () => {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        setVoiceConfirmation(prev => ({ ...prev, isOpen: false }));
+    };
+
+    const parseVoiceQuantityAndTitle = (transcript, defaultUnit) => {
+        let extractedQty = "";
+        let extractedUnit = defaultUnit;
+        let extractedTitle = transcript;
+
+        const regex = /^(\d+(?:\.\d+)?|\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\b)\s+([a-zA-Z]+)?\s*(?:of\s+)?(.*)/i;
+        const match = transcript.trim().match(regex);
+
+        if (match) {
+            let numStr = match[1].toLowerCase();
+            const numMap = { 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5', 'six': '6', 'seven': '7', 'eight': '8', 'nine': '9', 'ten': '10' };
+            extractedQty = numMap[numStr] || numStr;
+
+            const word2 = (match[2] || "").toLowerCase();
+            const rest = match[3] || "";
+
+            const kgSynonyms = ['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms'];
+            const litreSynonyms = ['l', 'liter', 'liters', 'litre', 'litres'];
+            const servingSynonyms = ['serving', 'servings', 'meal', 'meals', 'portion', 'portions', 'plate', 'plates', 'tray', 'trays', 'box', 'boxes'];
+
+            if (kgSynonyms.includes(word2)) {
+                extractedUnit = 'kg';
+                extractedTitle = rest;
+            } else if (litreSynonyms.includes(word2)) {
+                extractedUnit = 'litres';
+                extractedTitle = rest;
+            } else if (servingSynonyms.includes(word2)) {
+                extractedUnit = 'servings';
+                extractedTitle = rest;
+            } else {
+                extractedTitle = word2 + (rest ? " " + rest : "");
+            }
+        }
+
+        extractedTitle = extractedTitle.charAt(0).toUpperCase() + extractedTitle.slice(1);
+        return { qty: extractedQty, unit: extractedUnit, title: extractedTitle || "Unknown Item" };
+    };
+
+    const startVoiceInput = () => handleVoiceInput((val) => {
+        if (typeof val === 'string') {
+            const { qty, unit, title } = parseVoiceQuantityAndTitle(val, foodUnit);
+            if (qty) setFoodQty(qty);
+            setFoodUnit(unit);
+            setFoodTitle(title);
+        }
+    }, false, "🎤 Speak quantity and food name (e.g. '5 kg of rice')...", null, true);
+
+    const startNeedVoiceInput = () => handleVoiceInput((val) => {
+        if (typeof val === 'string') {
+            const { qty, unit, title } = parseVoiceQuantityAndTitle(val, needUnit);
+            if (qty) setNeedQty(qty);
+            setNeedUnit(unit);
+            setNeedTitle(title);
+        }
+    }, false, "🎤 Speak quantity and item needed (e.g. '50 meals')...", null, true);
+
+    const startBugVoiceInput = () => handleVoiceInput(setBugContent, true, "🎤 Listening for bug details...", "🎤 Bug Details Captured!");
+
 
     const submitBugReport = async () => {
         if (!bugContent) return showToast("Please speak to describe the bug.", "error");
@@ -1180,6 +1340,35 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {/* Voice Confirmation Modal */}
+                {voiceConfirmation.isOpen && (
+                    <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-[9999] flex flex-col items-center justify-center p-4">
+                        <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl relative overflow-hidden">
+                            <div className="animate-pulse absolute top-0 left-0 w-full h-2 bg-emerald-500"></div>
+                            <div className="mx-auto w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mb-4 shadow-inner">
+                                🎤
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">Did you say?</h3>
+                            <p className="text-gray-700 font-medium text-lg leading-relaxed mb-6 italic bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                                "{voiceConfirmation.text}"
+                            </p>
+
+                            <div className="bg-orange-50 text-orange-800 text-xs font-bold py-2 px-4 rounded-xl mb-6 inline-block">
+                                Auto-filling in {voiceConfirmation.countdown}s...
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button onClick={closeVoiceConfirmation} className="flex-1 py-3 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors">
+                                    Cancel
+                                </button>
+                                <button onClick={confirmVoiceInput} className="flex-[2] py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20">
+                                    Yes, Confirm
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* --- TOP HEADER --- */}
                 <header className="h-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-8 shrink-0">
                     <div className="flex items-center gap-4 md:hidden">
@@ -1332,12 +1521,15 @@ export default function Dashboard() {
 
                                 {/* Toolbar */}
                                 <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                                    <div className="flex-1 w-full relative">
-                                        <input
-                                            type="text" placeholder="Search available food..."
-                                            value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
-                                            className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-emerald-500 focus:border-emerald-500 block p-3 outline-none"
-                                        />
+                                    <div className="flex-1 w-full relative flex gap-2">
+                                        <div className="relative w-full">
+                                            <input
+                                                type="text" placeholder="Search available food..."
+                                                value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+                                                className="w-full bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-emerald-500 focus:border-emerald-500 block p-3 outline-none"
+                                            />
+                                        </div>
+                                        <button onClick={() => handleVoiceInput(setSearchTerm, false, "🎤 Speak to search...", "🎤 Voice Input Captured")} className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-4 rounded-xl transition-colors font-bold text-xl shrink-0" title="Voice Search">🎤</button>
                                     </div>
                                     <div className="flex w-full md:w-auto gap-3 flex-wrap">
                                         {(user.role === 'Volunteer' || user.role === 'NGO') && (
@@ -1575,11 +1767,17 @@ export default function Dashboard() {
                                     <div className="p-8 space-y-6">
                                         <div>
                                             <label className="block text-sm font-bold text-gray-700 mb-2">Title / Item Needed</label>
-                                            <input type="text" value={needTitle} onChange={e => setNeedTitle(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-500 outline-none" placeholder="e.g. 50 Meals for Shelter" />
+                                            <div className="flex gap-2">
+                                                <input type="text" value={needTitle} onChange={e => setNeedTitle(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-500 outline-none" placeholder="e.g. 50 Meals for Shelter" />
+                                                <button onClick={startNeedVoiceInput} className="bg-orange-100 text-orange-600 hover:bg-orange-200 px-4 rounded-xl transition-colors font-bold text-xl shrink-0" title="Voice Input">🎤</button>
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
-                                            <textarea value={needDesc} onChange={e => setNeedDesc(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-500 outline-none h-28 resize-none" placeholder="Details about this request..." />
+                                            <div className="flex gap-2">
+                                                <textarea value={needDesc} onChange={e => setNeedDesc(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-orange-500 outline-none h-28 resize-none" placeholder="Details about this request..." />
+                                                <button onClick={() => handleVoiceInput(setNeedDesc, true, "🎤 Describe the request...")} className="bg-orange-100 text-orange-600 hover:bg-orange-200 px-4 rounded-xl transition-colors font-bold text-xl h-28 shrink-0" title="Voice Input">🎤</button>
+                                            </div>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
@@ -1706,9 +1904,12 @@ export default function Dashboard() {
 
                                             <div>
                                                 <label className="block text-sm font-bold text-gray-700 mb-2">Description</label>
-                                                <div className="relative">
-                                                    <textarea value={foodDesc} onChange={e => setFoodDesc(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none h-28 resize-none" placeholder="Briefly describe the food..." maxLength="300" />
-                                                    <span className="absolute bottom-3 right-3 text-xs text-gray-400 font-medium">{foodDesc.length}/300</span>
+                                                <div className="relative flex gap-2">
+                                                    <div className="relative w-full">
+                                                        <textarea value={foodDesc} onChange={e => setFoodDesc(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none h-28 resize-none" placeholder="Briefly describe the food..." maxLength="300" />
+                                                        <span className="absolute bottom-3 right-3 text-xs text-gray-400 font-medium">{foodDesc.length}/300</span>
+                                                    </div>
+                                                    <button onClick={() => handleVoiceInput(setFoodDesc, true, "🎤 Describe the food...")} className="bg-orange-100 text-orange-600 hover:bg-orange-200 px-4 rounded-xl transition-colors font-bold text-xl h-28 shrink-0" title="Voice Input">🎤</button>
                                                 </div>
                                             </div>
 
@@ -1807,13 +2008,16 @@ export default function Dashboard() {
                                                         )}
                                                         <div className="pt-4 border-t border-orange-200/50">
                                                             <label className="block text-xs font-bold text-orange-900 mb-2">Specific Handling Instructions (Optional)</label>
-                                                            <textarea
-                                                                value={handlingInstructions}
-                                                                onChange={e => setHandlingInstructions(e.target.value)}
-                                                                className="w-full bg-white border border-orange-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none text-orange-900 font-medium h-20 resize-none"
-                                                                placeholder="e.g. Keep flat, refrigerate immediately upon arrival, contains fragile containers..."
-                                                                maxLength="200"
-                                                            />
+                                                            <div className="flex gap-2">
+                                                                <textarea
+                                                                    value={handlingInstructions}
+                                                                    onChange={e => setHandlingInstructions(e.target.value)}
+                                                                    className="w-full bg-white border border-orange-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none text-orange-900 font-medium h-20 resize-none"
+                                                                    placeholder="e.g. Keep flat, refrigerate immediately upon arrival, contains fragile containers..."
+                                                                    maxLength="200"
+                                                                />
+                                                                <button onClick={() => handleVoiceInput(setHandlingInstructions, true, "🎤 Speak handling instructions...")} className="bg-orange-100 text-orange-600 hover:bg-orange-200 px-3 rounded-xl transition-colors font-bold text-lg h-20 shrink-0" title="Voice Input">🎤</button>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1849,7 +2053,10 @@ export default function Dashboard() {
                                                         <div className="w-full h-full flex items-center justify-center text-gray-400 font-medium">Click 'Use My Location' to load map.</div>
                                                     )}
                                                 </div>
-                                                <input type="text" placeholder="Gate Code / Landmark instructions (Optional)" value={pickupNote} onChange={e => setPickupNote(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none mt-3" />
+                                                <div className="flex gap-2 mt-3">
+                                                    <input type="text" placeholder="Gate Code / Landmark instructions (Optional)" value={pickupNote} onChange={e => setPickupNote(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                                    <button onClick={() => handleVoiceInput(setPickupNote, false, "🎤 Speak pickup instructions...")} className="bg-orange-100 text-orange-600 hover:bg-orange-200 px-4 rounded-xl transition-colors font-bold text-xl shrink-0" title="Voice Input">🎤</button>
+                                                </div>
                                             </div>
 
                                             <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
