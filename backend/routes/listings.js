@@ -59,23 +59,48 @@ router.get('/', async (req, res) => {
 
         // FETCH DATA & POPULATE FIELDS
         const listings = await FoodListing.find(query)
-            .sort({ date: -1 })
+            .sort({ createdAt: -1 })
             .populate('donor', 'name phone address createdAt isVerified')
             .populate('claimedBy', 'name phone address ngoRegNumber')
             .populate('collectedBy', 'name phone address');
 
-        // Smart Expiry Logic
+        // Smart Expiry & Reservation Logic
         const currentTime = Date.now();
-        const activeListings = listings.filter(item => {
+        const activeListings = [];
+
+        for (let item of listings) {
             const createdTime = new Date(item.createdAt).getTime();
             const expiryTime = createdTime + (item.expiry_hours * 60 * 60 * 1000);
 
-            // If item is already claimed/delivered, keep it visible for history
-            if (item.status !== 'Available') return true;
+            // Lazy Release for Expired Reservations (Task 3.2.3)
+            if (item.status === 'Reserved' && item.reservedUntil && new Date(item.reservedUntil).getTime() < currentTime) {
+                // Background update to DB
+                FoodListing.findByIdAndUpdate(item._id, { status: 'Available', $unset: { reservedBy: 1, reservedUntil: 1 } }).exec();
 
-            // If Available, only show if not expired
-            return currentTime < expiryTime;
-        });
+                // Update local object for this request
+                item.status = 'Available';
+                item.reservedBy = null;
+                item.reservedUntil = null;
+            }
+
+            // If item is already claimed/delivered, keep it visible for history mapping
+            if (item.status !== 'Available' && item.status !== 'Reserved') {
+                activeListings.push(item);
+                continue;
+            }
+
+            // Hide expired Available listings
+            if (currentTime >= expiryTime) continue;
+
+            // If Reserved, ONLY show it to the NGO who reserved it (or keep it in the list if the current user is that NGO)
+            if (item.status === 'Reserved') {
+                // If it's the requesting user's reservation, or the donor looking at their own feed
+                // Note: GET / listings doesn't strongly require auth, so we check req.user if it exists
+                // We will handle the exact frontend filtering inside Dashboard.jsx, so we return the reserved item if the lock is active.
+            }
+
+            activeListings.push(item);
+        }
 
         res.json(activeListings);
     } catch (err) {
@@ -91,7 +116,7 @@ router.get('/', async (req, res) => {
 router.get('/user/:id', async (req, res) => {
     try {
         const listings = await FoodListing.find({ donor: req.params.id })
-            .sort({ date: -1 })
+            .sort({ createdAt: -1 })
             .populate('donor', 'name phone address createdAt isVerified')
             .populate('claimedBy', 'name phone address ngoRegNumber')
             .populate('collectedBy', 'name phone address');
@@ -265,6 +290,51 @@ router.post('/', auth, async (req, res) => {
 });
 
 // ==========================================
+// 3.01 RESERVE LISTING (Task 3.2.3)
+// ==========================================
+// @route   PUT /api/listings/:id/reserve
+router.put('/:id/reserve', auth, async (req, res) => {
+    try {
+        const user = await User.findById(req.user.id);
+        if (user.role !== 'NGO') {
+            return res.status(403).json({ msg: 'Only NGOs can reserve listings.' });
+        }
+        if (user.isBanned) {
+            return res.status(403).json({ msg: 'Your account is currently suspended.' });
+        }
+
+        const listing = await FoodListing.findById(req.params.id);
+        if (!listing) return res.status(404).json({ msg: 'Listing not found' });
+
+        // If it's fully claimed or delivered, deny
+        if (listing.status === 'Claimed' || listing.status === 'In Transit' || listing.status === 'Delivered') {
+            return res.status(400).json({ msg: 'Listing is already claimed.' });
+        }
+
+        // Check if it's already reserved by someone else
+        if (listing.status === 'Reserved') {
+            const now = Date.now();
+            const lockExpiry = new Date(listing.reservedUntil).getTime();
+
+            if (now < lockExpiry && listing.reservedBy.toString() !== req.user.id) {
+                return res.status(400).json({ msg: 'Listing is currently reserved by another NGO.' });
+            }
+        }
+
+        // Apply Reservation
+        listing.status = 'Reserved';
+        listing.reservedBy = req.user.id;
+        listing.reservedUntil = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
+
+        await listing.save();
+        res.json(listing);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// ==========================================
 // 3.1 UPDATE LISTING (For Donors)
 // ==========================================
 // @route   PUT /api/listings/:id
@@ -410,7 +480,26 @@ router.put('/:id/status', auth, async (req, res) => {
         }
 
         if (status === 'Cancelled') listing.cancellationReason = reason;
-        if (status === 'Claimed') listing.claimedBy = req.user.id;
+
+        if (status === 'Claimed') {
+            // Validation for 10-Minute Reservation Lock (Task 3.2.3)
+            if (listing.status === 'Reserved') {
+                const now = Date.now();
+                const lockExpiry = new Date(listing.reservedUntil).getTime();
+
+                // If lock is active and the person claiming isn't the reserver
+                if (now < lockExpiry && listing.reservedBy.toString() !== req.user.id) {
+                    return res.status(403).json({ msg: 'This item is currently reserved by another NGO. Please try again later.' });
+                }
+            } else if (listing.status !== 'Available') {
+                return res.status(400).json({ msg: 'This item is no longer available.' });
+            }
+
+            // Clear reservation data on successful claim
+            listing.reservedBy = undefined;
+            listing.reservedUntil = undefined;
+            listing.claimedBy = req.user.id;
+        }
 
         // Volunteer picking up with photo proof
         if (status === 'In Transit') {

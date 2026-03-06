@@ -14,6 +14,7 @@ import { LayoutDashboard, Heart, History, UserCircle, PlusCircle, LogOut, Bell, 
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+import Webcam from "react-webcam";
 
 // ==========================================
 // 1. LEAFLET ICON FIX
@@ -79,10 +80,12 @@ export default function Dashboard() {
                 createdAt: localStorage.getItem('user_createdAt') || null,
                 streakCount: parseInt(localStorage.getItem('user_streak') || '0'),
                 badges: safeParse('user_badges') || [],
-                totalDeliveries: parseInt(localStorage.getItem('user_totalDeliveries') || '0')
+                totalDeliveries: parseInt(localStorage.getItem('user_totalDeliveries') || '0'),
+                maxWeight: parseFloat(localStorage.getItem('user_maxWeight') || '0'),
+                maxServings: parseInt(localStorage.getItem('user_maxServings') || '0')
             };
         }
-        return { id: null, name: '', email: '', role: '', phone: '', address: '', isVerified: false, isTrained: false, credits: 0, ngoCapacity: { fridge: '', dryStorage: '' }, notifications: { email: true, sms: false }, verificationDocument: '', servedGroups: 'General', isAvailable: false, isBanned: false, banReason: '', location: null, serviceRadius: 5, createdAt: null, streakCount: 0, badges: [], totalDeliveries: 0 };
+        return { id: null, name: '', email: '', role: '', phone: '', address: '', isVerified: false, isTrained: false, credits: 0, ngoCapacity: { fridge: '', dryStorage: '' }, notifications: { email: true, sms: false }, verificationDocument: '', servedGroups: 'General', isAvailable: false, isBanned: false, banReason: '', location: null, serviceRadius: 5, createdAt: null, streakCount: 0, badges: [], totalDeliveries: 0, maxWeight: 0, maxServings: 0 };
     });
 
     const [listings, setListings] = useState([]);
@@ -151,6 +154,8 @@ export default function Dashboard() {
     const [volunteerSchedule, setVolunteerSchedule] = useState('');
     const [editLocation, setEditLocation] = useState(null);
     const [editServiceRadius, setEditServiceRadius] = useState(5);
+    const [editMaxWeight, setEditMaxWeight] = useState(0);
+    const [editMaxServings, setEditMaxServings] = useState(0);
 
     // Filters & Forms
     const [searchTerm, setSearchTerm] = useState('');
@@ -196,6 +201,7 @@ export default function Dashboard() {
     const [isUploading, setIsUploading] = useState(false);
     const [donorInitials, setDonorInitials] = useState('');
     const [accessCode, setAccessCode] = useState('');
+    const [showCameraModal, setShowCameraModal] = useState(false);
 
     const [location, setLocation] = useState({ lat: 20.5937, lng: 78.9629 });
     const [isLocating, setIsLocating] = useState(false);
@@ -835,6 +841,8 @@ export default function Dashboard() {
                 verificationDocument: verificationDoc,
                 servedGroups: editServedGroups,
                 volunteerSchedule: volunteerSchedule,
+                maxWeight: editMaxWeight,
+                maxServings: editMaxServings,
                 // NEW MAP FIELDS ADDED HERE:
                 location: editLocation,
                 serviceRadius: editServiceRadius
@@ -844,18 +852,16 @@ export default function Dashboard() {
             setUser(updatedUser);
 
             localStorage.setItem('user_name', updatedUser.name);
-            localStorage.setItem('user_phone', updatedUser.phone);
-            localStorage.setItem('user_address', updatedUser.address);
+            localStorage.setItem('user_phone', updatedUser.phone || '');
+            localStorage.setItem('user_address', updatedUser.address || '');
             localStorage.setItem('user_capacity', JSON.stringify(updatedUser.ngoCapacity));
-            localStorage.setItem('user_servedGroups', updatedUser.servedGroups);
+            localStorage.setItem('user_servedGroups', updatedUser.servedGroups || 'General');
 
             // NEW LOCAL STORAGE SETTERS ADDED HERE:
-            if (updatedUser.location) {
-                localStorage.setItem('user_location', JSON.stringify(updatedUser.location));
-            }
-            if (updatedUser.serviceRadius !== undefined) {
-                localStorage.setItem('user_radius', updatedUser.serviceRadius);
-            }
+            localStorage.setItem('user_location', JSON.stringify(updatedUser.location));
+            localStorage.setItem('user_radius', updatedUser.serviceRadius);
+            localStorage.setItem('user_maxWeight', updatedUser.maxWeight || 0);
+            localStorage.setItem('user_maxServings', updatedUser.maxServings || 0);
 
             setIsEditingProfile(false);
             showToast("Profile Updated!");
@@ -880,6 +886,8 @@ export default function Dashboard() {
         // NEW: Load existing location or default to a center point
         setEditLocation(user.location || { lat: 20.5937, lng: 78.9629 });
         setEditServiceRadius(user.serviceRadius || 5);
+        setEditMaxWeight(user.maxWeight || 0);
+        setEditMaxServings(user.maxServings || 0);
 
         setIsEditingProfile(true);
     };
@@ -970,6 +978,20 @@ export default function Dashboard() {
         let reason = null;
         if (newStatus === 'Cancelled') { reason = prompt("State reason for issue:"); if (!reason) return; }
         else if (newStatus !== 'ReadyToPickup') { if (!window.confirm(`Mark as ${newStatus}?`)) return; }
+
+        // --- Carrying Capacity Validation (Task 3.2.4) ---
+        if ((newStatus === 'Claimed' || newStatus === 'In Transit') && user.role === 'Volunteer') {
+            const item = listings.find(l => (l._id || l.id) === id);
+            if (item) {
+                if ((item.unit === 'kg' || item.unit === 'litres') && user.maxWeight > 0 && item.quantity > user.maxWeight) {
+                    return showToast(`⚠️ This exceeds your max weight capacity (${user.maxWeight}kg)!`, "error");
+                }
+                if (item.unit === 'servings' && user.maxServings > 0 && item.quantity > user.maxServings) {
+                    return showToast(`⚠️ This exceeds your max servings capacity (${user.maxServings})!`, "error");
+                }
+            }
+        }
+
         if (newStatus === 'In Transit' && user.role === 'Volunteer' && !proofUrl) return showToast("⚠️ Upload QR photo first!", "error");
         if (newStatus === 'Delivered' && !deliveryProof && user.role === 'Volunteer') return showToast("⚠️ Upload delivery proof first!", "error");
 
@@ -979,6 +1001,20 @@ export default function Dashboard() {
             if (newStatus === 'ReadyToPickup') showToast("📡 QR Code Generated!", "success");
             fetchListings(); fetchMyHistory(); fetchUserData(); fetchStats(); setDeliveryProof('');
         } catch (err) { alert("Update failed."); }
+    };
+
+    const handleReserve = async (id) => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.put(`${API_URL}/listings/${id}/reserve`, {}, {
+                headers: { 'x-auth-token': token }
+            });
+            showToast("⌛ Protected! You have 10 minutes to claim this.", "success");
+            setListings(prevListings => prevListings.map(item => (item._id || item.id) === id ? { ...item, ...res.data } : item));
+        } catch (err) {
+            console.error("Reserve Failed", err);
+            showToast(err.response?.data?.msg || "⚠️ Failed to reserve. Item may be claimed.", "error");
+        }
     };
 
     const deleteListing = async (id) => {
@@ -1009,7 +1045,9 @@ export default function Dashboard() {
         } else if (view === 'feed') {
             if (item.status === 'Delivered') return false; // Exclude delivered from feed
             if (item.status !== 'Available') {
-                const isRelevant = user.role === 'Volunteer' || (user.role === 'NGO' && isSameUser(item.claimedBy, user.id)) || (user.role === 'Donor' && isSameUser(item.donor, user.id));
+                const isRelevant = user.role === 'Volunteer' ||
+                    (user.role === 'NGO' && (isSameUser(item.claimedBy, user.id) || isSameUser(item.reservedBy, user.id))) ||
+                    (user.role === 'Donor' && isSameUser(item.donor, user.id));
                 if (!isRelevant) return false;
             }
         } else if (view === 'history') {
@@ -1038,7 +1076,11 @@ export default function Dashboard() {
 
     if (sortMethod === 'closest' && location.lat) {
         displayListings.sort((a, b) => parseFloat(calculateDistance(location.lat, location.lng, a.location?.lat, a.location?.lng)) - parseFloat(calculateDistance(location.lat, location.lng, b.location?.lat, b.location?.lng)));
-    } else if (sortMethod === 'expiry') { displayListings.sort((a, b) => a.expiry_hours - b.expiry_hours); }
+    } else if (sortMethod === 'expiry') {
+        displayListings.sort((a, b) => a.expiry_hours - b.expiry_hours);
+    } else if (sortMethod === 'newest') {
+        displayListings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
 
     // ==========================================
     // RENDER SAAS LAYOUT
@@ -1612,6 +1654,14 @@ export default function Dashboard() {
                                                         <UserCircle size={14} /> {item.donor?.name || 'Unknown'} {item.donor?.isVerified && <CheckCircle2 size={14} className="text-blue-500" />}
                                                     </p>
 
+                                                    {user.role === 'Volunteer' && (
+                                                        (item.unit === 'kg' || item.unit === 'litres' ? (user.maxWeight > 0 && item.quantity > user.maxWeight) : (user.maxServings > 0 && item.quantity > user.maxServings)) && (
+                                                            <div className="bg-red-50 text-red-600 text-[10px] font-black px-2.5 py-1 rounded-lg border border-red-100 flex items-center gap-1 mb-3 animate-pulse">
+                                                                ⚠️ EXCEEDS YOUR CARRYING CAPACITY
+                                                            </div>
+                                                        )
+                                                    )}
+
                                                     {/* Meta Tags */}
                                                     <div className="flex flex-wrap gap-2 mb-6">
                                                         <span className="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-1 rounded-lg">📦 {item.quantity} {item.unit}</span>
@@ -1703,15 +1753,38 @@ export default function Dashboard() {
 
                                                         {/* ACTION BUTTONS BASED ON STATUS & ROLE */}
                                                         {item.status === 'Available' && user.role === 'NGO' && (
-                                                            <button
-                                                                onClick={() => {
-                                                                    if (!user.isVerified) return showToast("🔒 Verification Pending.", "error");
-                                                                    updateStatus(item._id || item.id, 'Claimed');
-                                                                }}
-                                                                className={`w-full ${!user.isVerified ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-800 hover:bg-emerald-900'} text-white font-bold py-3 rounded-xl transition-colors mt-2 shadow-sm`}
-                                                            >
-                                                                {user.isVerified ? 'Claim Donation' : '🔒 Verification Pending'}
-                                                            </button>
+                                                            <div className="flex gap-2 mt-2">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (!user.isVerified) return showToast("🔒 Verification Pending.", "error");
+                                                                        handleReserve(item._id || item.id);
+                                                                    }}
+                                                                    className={`flex-1 ${!user.isVerified ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200' : 'bg-orange-50 text-orange-700 hover:bg-orange-100 border border-orange-200'} font-bold py-3 rounded-xl transition-colors shadow-sm text-sm`}
+                                                                >
+                                                                    ⏳ Reserve (10 Min)
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (!user.isVerified) return showToast("🔒 Verification Pending.", "error");
+                                                                        updateStatus(item._id || item.id, 'Claimed');
+                                                                    }}
+                                                                    className={`flex-1 ${!user.isVerified ? 'bg-gray-400 cursor-not-allowed' : 'bg-emerald-800 hover:bg-emerald-900'} text-white font-bold py-3 rounded-xl transition-colors shadow-sm text-sm`}
+                                                                >
+                                                                    {user.isVerified ? 'Claim Now' : '🔒 Pending'}
+                                                                </button>
+                                                            </div>
+                                                        )}
+
+                                                        {item.status === 'Reserved' && user.role === 'NGO' && (
+                                                            <div className="mt-2 bg-orange-50 border border-orange-200 rounded-xl p-3 text-center animate-pulse">
+                                                                <p className="text-orange-800 font-bold mb-2">🔒 Reserved for your NGO</p>
+                                                                <button
+                                                                    onClick={() => updateStatus(item._id || item.id, 'Claimed')}
+                                                                    className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-2 rounded-lg transition-colors shadow-sm text-sm"
+                                                                >
+                                                                    Confirm Final Claim
+                                                                </button>
+                                                            </div>
                                                         )}
 
                                                         {item.status === 'Claimed' && user.role === 'Donor' && isSameUser(item.donor, user.id) && (
@@ -2024,12 +2097,95 @@ export default function Dashboard() {
                                             </div>
 
                                             <div>
-                                                <label className="block text-sm font-bold text-gray-700 mb-2">Upload Photo</label>
-                                                <div className="border-2 border-dashed border-gray-300 rounded-2xl p-6 bg-gray-50 text-center hover:bg-gray-100 transition-colors">
-                                                    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e)} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-bold file:bg-emerald-100 file:text-emerald-800 hover:file:bg-emerald-200 transition-colors cursor-pointer" />
+                                                <label className="block text-sm font-bold text-gray-700 mb-2">Food Image</label>
+                                                <div className="flex flex-col sm:flex-row gap-4">
+                                                    <div className="flex-1 border-2 border-dashed border-gray-300 rounded-2xl p-4 bg-gray-50 text-center hover:bg-gray-100 transition-colors relative cursor-pointer">
+                                                        <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
+                                                        <div className="flex items-center justify-center gap-2 text-gray-600 font-bold pointer-events-none mt-1">
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                                                            Upload Photo
+                                                        </div>
+                                                    </div>
+                                                    <div
+                                                        onClick={() => setShowCameraModal(true)}
+                                                        className="flex-1 border-2 border-dashed border-gray-300 rounded-2xl p-4 bg-emerald-50 text-center hover:bg-emerald-100 transition-colors relative cursor-pointer"
+                                                    >
+                                                        {/* Native mobile capture (hidden but functional for mobile browsers) */}
+                                                        <input type="file" accept="image/*" capture="environment" onChange={(e) => handleImageUpload(e)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 sm:hidden" />
+
+                                                        {/* Desktop/Tablet explicit button text */}
+                                                        <div className="flex items-center justify-center gap-2 text-emerald-800 font-bold pointer-events-none mt-1">
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                            Take Photo
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                {isUploading && <p className="text-orange-600 font-bold text-sm mt-2 flex items-center gap-2">Uploading Image...</p>}
-                                                {foodImage && <div className="mt-4"><img src={foodImage} alt="Preview" className="w-32 h-32 object-cover rounded-xl shadow-sm border border-gray-200" /><p className="text-emerald-600 font-bold text-sm mt-1">✓ Uploaded</p></div>}
+
+                                                {/* Desktop Camera Modal */}
+                                                {showCameraModal && (
+                                                    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+                                                        <div className="bg-white rounded-3xl overflow-hidden w-full max-w-md shadow-2xl relative">
+                                                            <div className="bg-gray-900 flex justify-between items-center p-4">
+                                                                <h3 className="text-white font-bold">Take Photo</h3>
+                                                                <button onClick={() => setShowCameraModal(false)} className="text-gray-400 hover:text-white transition-colors bg-gray-800 p-2 rounded-full">
+                                                                    <X className="w-5 h-5" />
+                                                                </button>
+                                                            </div>
+                                                            <div className="bg-black relative">
+                                                                <Webcam
+                                                                    audio={false}
+                                                                    screenshotFormat="image/jpeg"
+                                                                    videoConstraints={{ facingMode: "environment" }}
+                                                                    className="w-full h-auto aspect-square object-cover"
+                                                                >
+                                                                    {({ getScreenshot }) => (
+                                                                        <div className="absolute bottom-6 left-0 right-0 flex justify-center pb-4">
+                                                                            <button
+                                                                                onClick={async () => {
+                                                                                    const imageSrc = getScreenshot();
+                                                                                    if (imageSrc) {
+                                                                                        // Convert base64 to File object to reuse existing upload logic
+                                                                                        setIsUploading(true);
+                                                                                        setShowCameraModal(false);
+                                                                                        try {
+                                                                                            const res = await fetch(imageSrc);
+                                                                                            const blob = await res.blob();
+                                                                                            const file = new File([blob], "camera-capture.jpg", { type: "image/jpeg" });
+
+                                                                                            const formData = new FormData();
+                                                                                            formData.append('image', file);
+
+                                                                                            const axiosRes = await axios.post(`${API_URL}/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+                                                                                            setFoodImage(axiosRes.data.imageUrl);
+
+                                                                                            /* Optional, assuming the user's codebase has showToast */
+                                                                                            if (typeof showToast === 'function') {
+                                                                                                showToast("📸 Photo captured and uploaded!", "success");
+                                                                                            }
+                                                                                        } catch (err) {
+                                                                                            console.error(err);
+                                                                                            if (typeof showToast === 'function') {
+                                                                                                showToast("Failed to upload photo", "error");
+                                                                                            }
+                                                                                        } finally {
+                                                                                            setIsUploading(false);
+                                                                                        }
+                                                                                    }
+                                                                                }}
+                                                                                className="bg-white hover:bg-gray-200 text-emerald-900 font-bold p-4 rounded-full shadow-[0_0_15px_rgba(255,255,255,0.5)] transition-transform hover:scale-105 active:scale-95 flex items-center justify-center border-4 border-gray-300"
+                                                                                title="Click to capture"
+                                                                            >
+                                                                                <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M12 4C7.58 4 4 7.58 4 12s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" /><circle cx="12" cy="12" r="4" /></svg>
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </Webcam>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {isUploading && <p className="text-orange-600 font-bold text-sm mt-3 flex items-center gap-2">⏳ Uploading Image...</p>}
+                                                {foodImage && <div className="mt-4"><img src={foodImage} alt="Preview" className="w-32 h-32 object-cover rounded-xl shadow-sm border border-gray-200" /><p className="text-emerald-600 font-bold text-sm mt-1">✓ Image Ready</p></div>}
                                             </div>
 
                                             {/* Map Section */}
@@ -2104,6 +2260,13 @@ export default function Dashboard() {
                                                 <div><span className="text-gray-400 font-medium block mb-1">Email Address</span><span className="font-bold text-gray-900">{user.email || 'Not provided'}</span></div>
                                                 <div><span className="text-gray-400 font-medium block mb-1">Phone Number</span><span className="font-bold text-gray-900">{user.phone || 'Not provided'}</span></div>
                                                 <div className="col-span-1 md:col-span-2"><span className="text-gray-400 font-medium block mb-1">Primary Address</span><span className="font-bold text-gray-900">{user.address || 'Not provided'}</span></div>
+                                                {user.role === 'Volunteer' && (
+                                                    <div className="col-span-1 md:col-span-2 bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100 flex flex-wrap gap-6 mb-2">
+                                                        <div><span className="text-gray-400 font-medium block mb-1 uppercase text-[10px] tracking-wider">🚚 Max Carrying Weight</span><span className="font-bold text-emerald-900">{user.maxWeight || 0} kg</span></div>
+                                                        <div><span className="text-gray-400 font-medium block mb-1 uppercase text-[10px] tracking-wider">🍽️ Max Servings</span><span className="font-bold text-emerald-900">{user.maxServings || 0} Servings</span></div>
+                                                    </div>
+                                                )}
+
                                                 {user.role === 'NGO' && (
                                                     <>
                                                         <div><span className="text-gray-400 font-medium block mb-1">❄️ Fridge Capacity</span><span className="font-bold text-gray-900">{user.ngoCapacity?.fridge || 'Not specified'}</span></div>
@@ -2171,6 +2334,19 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
 
+                                            {/* Tax Exemption Certificate (Donor & Volunteer) */}
+                                            {(user.role === 'Donor' || user.role === 'Volunteer') && (
+                                                <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100 mt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                                    <div className="flex-1">
+                                                        <h4 className="text-sm font-bold text-blue-900 mb-1">Tax Exemption Certificate</h4>
+                                                        <p className="text-xs text-blue-700">Download your certificate for recent food donations and volunteer work to claim tax benefits.</p>
+                                                    </div>
+                                                    <a href="/Tax_Exemption_Certificate.pdf" download="Tax_Exemption_Certificate.pdf" className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-6 rounded-xl transition-colors shadow-sm whitespace-nowrap text-center inline-block">
+                                                        📄 Download PDF
+                                                    </a>
+                                                </div>
+                                            )}
+
                                             {/* Danger Zone */}
                                             <div className="bg-red-50 p-6 rounded-2xl border border-red-100 mt-8">
                                                 <div className="flex items-center gap-2 mb-4 text-red-900 font-bold">
@@ -2213,6 +2389,22 @@ export default function Dashboard() {
                                                 <div><label className="block text-sm font-bold text-gray-700 mb-1">Phone</label><input type="text" value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900" /></div>
                                             </div>
                                             <div><label className="block text-sm font-bold text-gray-700 mb-1">Address</label><input type="text" value={editAddress} onChange={e => setEditAddress(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900" /></div>
+
+                                            {user.role === 'Volunteer' && (
+                                                <div className="bg-emerald-50/50 p-6 rounded-2xl border border-emerald-100 space-y-4">
+                                                    <h4 className="text-sm font-bold text-emerald-900 flex items-center gap-2">🚚 Carrying Capacity (Volunteer Only)</h4>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-emerald-700 mb-1">Max Weight (kg)</label>
+                                                            <input type="number" placeholder="e.g. 10" value={editMaxWeight} onChange={e => setEditMaxWeight(parseFloat(e.target.value) || 0)} className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-emerald-700 mb-1">Max Servings</label>
+                                                            <input type="number" placeholder="e.g. 20" value={editMaxServings} onChange={e => setEditMaxServings(parseInt(e.target.value) || 0)} className="w-full bg-white border border-emerald-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-emerald-500 outline-none text-gray-900" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {user.role === 'NGO' && (
                                                 <div className="space-y-4">

@@ -133,7 +133,8 @@ router.put('/update', auth, async (req, res) => {
     try {
         const {
             name, phone, address, ngoCapacity, notifications, verificationDocument,
-            isAvailable, servedGroups, volunteerSchedule, location, serviceRadius
+            isAvailable, servedGroups, volunteerSchedule, location, serviceRadius,
+            maxWeight, maxServings
         } = req.body;
 
         // 1. Find User First
@@ -148,6 +149,8 @@ router.put('/update', auth, async (req, res) => {
         if (servedGroups) user.servedGroups = servedGroups;
         if (notifications) user.notifications = notifications;
         if (verificationDocument) user.verificationDocument = verificationDocument;
+        if (maxWeight !== undefined) user.maxWeight = maxWeight;
+        if (maxServings !== undefined) user.maxServings = maxServings;
 
         // NEW: Update Map Fields
         if (location) user.location = location;

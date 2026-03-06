@@ -1,17 +1,21 @@
 import { motion } from "framer-motion";
 import { Play, ShieldCheck, Activity, BrainCircuit, Route, Leaf, Database, Mic } from "lucide-react";
+import TirupathiImg from "./Tirupathi.jpg";
+import MithileshImg from "./Mithilesh.jpeg";
+import SivaImg from "./Siva.jpeg";
+import GopikaImg from "./Gopika.jpeg";
 
 export default function About() {
   return (
     <div className="bg-white font-sans overflow-hidden">
-      
+
       {/* 1. HERO SECTION (Reference: Image 1 - Dark overlay, bold centered text) */}
       <section className="relative h-[60vh] min-h-[500px] flex items-center justify-center">
         {/* Background Image with Overlay */}
         <div className="absolute inset-0 z-0">
-          <img 
-            src="https://images.unsplash.com/photo-1593113565214-80afcb4a45d7?q=80&w=2070&auto=format&fit=crop" 
-            alt="Volunteers loading food" 
+          <img
+            src="https://images.unsplash.com/photo-1593113565214-80afcb4a45d7?q=80&w=2070&auto=format&fit=crop"
+            alt="Volunteers loading food"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-emerald-950/75 mix-blend-multiply"></div>
@@ -41,9 +45,9 @@ export default function About() {
       <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-            
+
             {/* Left Column: Mission & Video */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
@@ -62,9 +66,9 @@ export default function About() {
 
               {/* Video Placeholder Box */}
               <div className="relative rounded-2xl overflow-hidden shadow-lg group cursor-pointer border border-gray-100">
-                <img 
-                  src="https://images.unsplash.com/photo-1518398046578-8cca57782e17?q=80&w=2000&auto=format&fit=crop" 
-                  alt="App interface preview" 
+                <img
+                  src="https://images.unsplash.com/photo-1518398046578-8cca57782e17?q=80&w=2000&auto=format&fit=crop"
+                  alt="App interface preview"
                   className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-700"
                 />
                 <div className="absolute inset-0 bg-gray-900/40 flex items-center justify-center group-hover:bg-gray-900/50 transition-colors">
@@ -79,7 +83,7 @@ export default function About() {
             </motion.div>
 
             {/* Right Column: Core Values Box */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
@@ -87,7 +91,7 @@ export default function About() {
               className="bg-[#f2f7f5] rounded-[2rem] p-8 md:p-12 shadow-sm border border-emerald-50"
             >
               <h3 className="text-xl font-bold text-gray-900 mb-8">System Core Pillars</h3>
-              
+
               <div className="space-y-8">
                 <div className="flex gap-4 items-start">
                   <div className="bg-white p-2.5 rounded-xl shadow-sm text-emerald-700 shrink-0">
@@ -147,9 +151,9 @@ export default function About() {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
+
             {/* Card 1 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -166,7 +170,7 @@ export default function About() {
             </motion.div>
 
             {/* Card 2 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -184,7 +188,7 @@ export default function About() {
             </motion.div>
 
             {/* Card 3 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -216,64 +220,84 @@ export default function About() {
             Our team combines expertise in software engineering, supply-chain logistics, and public health to build the most resilient food rescue platform possible.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+
             {/* Team Member 1 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              className="bg-white rounded-3xl p-8 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] border border-gray-100 text-center flex flex-col items-center"
+              className="bg-white rounded-3xl p-10 shadow-[0_4px_30px_-4px_rgba(0,0,0,0.06)] border border-gray-50 text-center flex flex-col items-center hover:-translate-y-1 transition-transform"
             >
-              <img 
-                src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=300&auto=format&fit=crop" 
-                alt="Aisha Patel" 
-                className="w-28 h-28 rounded-full object-cover mb-6 border-4 border-emerald-50"
+              <img
+                src={TirupathiImg}
+                alt="Tirupathi"
+                className="w-28 h-28 rounded-full object-cover mb-4 border-4 border-emerald-50"
               />
-              <h4 className="text-xl font-bold text-gray-900 mb-1">Aisha Patel</h4>
-              <p className="text-emerald-700 text-sm font-bold mb-4">Lead Logistics Engineer</p>
-              <p className="text-gray-600 text-sm leading-relaxed flex-grow">
-                Developed the technical processes and dispatch algorithms necessary to coordinate location-based pickups under strict perishability constraints.
+              <h4 className="text-xl font-bold text-[#0f2d40] mb-1 tracking-tight">Tirupathi Reddy</h4>
+              <p className="text-emerald-700 text-[13px] font-bold mb-4 tracking-wide">Backend Engineer</p>
+              <p className="text-[#5c6b77] text-sm leading-[1.6] flex-grow font-medium">
+                Designed and implemented the server-side architecture, APIs, and database logic to ensure reliable data processing, system functionality, and secure communication between the application components.
               </p>
             </motion.div>
 
             {/* Team Member 2 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.1 }}
-              className="bg-white rounded-3xl p-8 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] border border-gray-100 text-center flex flex-col items-center"
+              className="bg-white rounded-3xl p-10 shadow-[0_4px_30px_-4px_rgba(0,0,0,0.06)] border border-gray-50 text-center flex flex-col items-center hover:-translate-y-1 transition-transform"
             >
-              <img 
-                src="https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=300&auto=format&fit=crop" 
-                alt="Marcus Johnson" 
-                className="w-28 h-28 rounded-full object-cover mb-6 border-4 border-emerald-50"
+              <img
+                src={MithileshImg}
+                alt="Mithilesh"
+                className="w-28 h-28 rounded-full object-cover mb-4 border-4 border-emerald-50"
               />
-              <h4 className="text-xl font-bold text-gray-900 mb-1">Marcus Johnson</h4>
-              <p className="text-emerald-700 text-sm font-bold mb-4">Head of Public Health</p>
-              <p className="text-gray-600 text-sm leading-relaxed flex-grow">
-                Brings deep expertise in food policy, ensuring that our hygiene validation workflows and safety windows meet the highest regulatory standards.
+              <h4 className="text-xl font-bold text-[#0f2d40] mb-1 tracking-tight">Mithilesh Narne</h4>
+              <p className="text-emerald-700 text-[13px] font-bold mb-4 tracking-wide">Frontend Engineer</p>
+              <p className="text-[#5c6b77] text-sm leading-[1.6] flex-grow font-medium">
+                Developed the user interface and interactive components to create an intuitive, responsive, and user-friendly experience for interacting with the GiveBite platform.
               </p>
             </motion.div>
 
             {/* Team Member 3 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: 0.2 }}
-              className="bg-white rounded-3xl p-8 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.08)] border border-gray-100 text-center flex flex-col items-center"
+              className="bg-white rounded-3xl p-10 shadow-[0_4px_30px_-4px_rgba(0,0,0,0.06)] border border-gray-50 text-center flex flex-col items-center hover:-translate-y-1 transition-transform"
             >
-              <img 
-                src="https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=300&auto=format&fit=crop" 
-                alt="Elena Rodriguez" 
-                className="w-28 h-28 rounded-full object-cover mb-6 border-4 border-emerald-50"
+              <img
+                src={SivaImg}
+                alt="Siva"
+                className="w-28 h-28 rounded-full object-cover mb-4 border-4 border-emerald-50"
               />
-              <h4 className="text-xl font-bold text-gray-900 mb-1">Elena Rodriguez</h4>
-              <p className="text-emerald-700 text-sm font-bold mb-4">Data & ESG Director</p>
-              <p className="text-gray-600 text-sm leading-relaxed flex-grow">
-                Dedicated to building our predictive surplus models and ensuring our corporate partners have transparent, certified sustainability analytics.
+              <h4 className="text-xl font-bold text-[#0f2d40] mb-1 tracking-tight">Siva Dharanesh</h4>
+              <p className="text-emerald-700 text-[13px] font-bold mb-4 tracking-wide">DevOps Engineer</p>
+              <p className="text-[#5c6b77] text-sm leading-[1.6] flex-grow font-medium">
+                Managed deployment pipelines, cloud infrastructure, and system monitoring to ensure smooth integration, reliable application performance, and efficient continuous delivery.
+              </p>
+            </motion.div>
+
+            {/* Team Member 4 */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.3 }}
+              className="bg-white rounded-3xl p-10 shadow-[0_4px_30px_-4px_rgba(0,0,0,0.06)] border border-gray-50 text-center flex flex-col items-center hover:-translate-y-1 transition-transform"
+            >
+              <img
+                src={GopikaImg}
+                alt="Gopika"
+                className="w-28 h-28 rounded-full object-cover mb-4 border-4 border-emerald-50"
+              />
+              <h4 className="text-xl font-bold text-[#0f2d40] mb-1 tracking-tight">Pon Gopika</h4>
+              <p className="text-emerald-700 text-[13px] font-bold mb-4 tracking-wide">Tester_QA Engineer</p>
+              <p className="text-[#5c6b77] text-sm leading-[1.6] flex-grow font-medium">
+                Conducted functional, usability, and performance testing to identify bugs, verify system requirements, and ensure the application operates reliably and meets quality standards.
               </p>
             </motion.div>
 

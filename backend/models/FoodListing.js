@@ -33,9 +33,13 @@ const FoodListingSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['Available', 'Claimed', 'In Transit', 'Delivered', 'Cancelled'],
+    enum: ['Available', 'Reserved', 'Claimed', 'In Transit', 'Delivered', 'Cancelled'],
     default: 'Available'
   },
+
+  // NEW: Reservation Logic (Task 3.2.3)
+  reservedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reservedUntil: { type: Date },
 
   // NEW: Reason for cancellation (Task 2.4.1)
   cancellationReason: { type: String },

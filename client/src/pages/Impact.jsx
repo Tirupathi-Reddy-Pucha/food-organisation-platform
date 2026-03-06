@@ -2,11 +2,107 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { Package, Heart, Leaf, Droplets, Store, Users, ShieldCheck, TrendingUp, CheckCircle2, Star, ArrowRight } from "lucide-react";
+import { Package, Heart, Leaf, Droplets, Store, Users, ShieldCheck, TrendingUp, CheckCircle2, Star, ArrowRight, Activity, X } from "lucide-react";
 
 export default function Impact() {
     const [liveStats, setLiveStats] = useState({ total_donations: 0, meals_saved: 0, co2_saved: 0, water_saved: 0 });
     const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+    const [loading, setLoading] = useState(true);
+
+    // Newsletter State
+    const [expandedNewsletter, setExpandedNewsletter] = useState(null);
+    const [visibleCount, setVisibleCount] = useState(3);
+
+    const dummyNewsletters = [
+        {
+            id: 1,
+            version: "Vol 04",
+            title: "Monthly Performance Reporting",
+            summary: "Welcome to the March 2023 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements...",
+            icon: <Activity className="text-[#f16f22] drop-shadow-sm" size={32} />,
+            iconBg: "bg-orange-50",
+            content: {
+                intro: "Welcome to the March 2023 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements, key metrics, and notable highlights for the month. Let's dive into the numbers and celebrate our collective successes.\n\nWe're proud to report a customer satisfaction rate of 94%, reflecting our commitment to delivering exceptional service. Thank you to the entire team for your dedication to customer success.\n\nYour feedback is invaluable to us. If you have any suggestions or insights regarding our performance or areas of improvement, please feel free to share them with the HR department.\n\nFollow us on social media for real-time updates and behind-the-scenes glimpses of our team in action.",
+                bullets: [
+                    "Launching the customer loyalty program.",
+                    "Expanding our online presence through targeted social media campaigns.",
+                    "Improving communication channels between departments."
+                ],
+                recognition: "Employee of the Month: Congratulations to Michael Turner for their exceptional dedication, hard work, and positive impact on the team. Your efforts do not go unnoticed.\n\nTeam Milestones: The product development team reached a significant milestone this month, successfully launching our new product line. The collective effort and collaboration are commendable."
+            }
+        },
+        {
+            id: 2,
+            version: "Vol 03",
+            title: "Monthly Performance Reporting",
+            summary: "Welcome to the February 2023 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements...",
+            icon: <Users className="text-emerald-500 drop-shadow-sm" size={32} />,
+            iconBg: "bg-emerald-50",
+            content: {
+                intro: "Welcome to the February 2023 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements, key metrics, and notable highlights for the month. Let's dive into the numbers and celebrate our collective successes.\n\nWe're proud to report a customer satisfaction rate of 94%, reflecting our commitment to delivering exceptional service. Thank you to the entire team for your dedication to customer success.\n\nYour feedback is invaluable to us. If you have any suggestions or insights regarding our performance or areas of improvement, please feel free to share them with the HR department.\n\nFollow us on social media for real-time updates and behind-the-scenes glimpses of our team in action.",
+                bullets: [
+                    "Launching the customer loyalty program.",
+                    "Expanding our online presence through targeted social media campaigns.",
+                    "Improving communication channels between departments."
+                ],
+                recognition: "Employee of the Month: Congratulations to Michael Turner for their exceptional dedication, hard work, and positive impact on the team. Your efforts do not go unnoticed.\n\nTeam Milestones: The product development team reached a significant milestone this month, successfully launching our new product line. The collective effort and collaboration are commendable."
+            }
+        },
+        {
+            id: 3,
+            version: "Vol 02",
+            title: "Monthly Performance Reporting",
+            summary: "Welcome to the January 2023 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements...",
+            icon: <ShieldCheck className="text-blue-500 drop-shadow-sm" size={32} />,
+            iconBg: "bg-blue-50",
+            content: {
+                intro: "Welcome to the January 2023 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements, key metrics, and notable highlights for the month. Let's dive into the numbers and celebrate our collective successes.\n\nWe're proud to report a customer satisfaction rate of 94%, reflecting our commitment to delivering exceptional service. Thank you to the entire team for your dedication to customer success.\n\nYour feedback is invaluable to us. If you have any suggestions or insights regarding our performance or areas of improvement, please feel free to share them with the HR department.\n\nFollow us on social media for real-time updates and behind-the-scenes glimpses of our team in action.",
+                bullets: [
+                    "Launching the customer loyalty program.",
+                    "Expanding our online presence through targeted social media campaigns.",
+                    "Improving communication channels between departments."
+                ],
+                recognition: "Employee of the Month: Congratulations to Michael Turner for their exceptional dedication, hard work, and positive impact on the team. Your efforts do not go unnoticed.\n\nTeam Milestones: The product development team reached a significant milestone this month, successfully launching our new product line. The collective effort and collaboration are commendable."
+            }
+        },
+        // Additional dummy items to demonstrate pagination
+        {
+            id: 4,
+            version: "Vol 01",
+            title: "Monthly Performance Reporting",
+            summary: "Welcome to the December 2022 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements...",
+            icon: <TrendingUp className="text-purple-500 drop-shadow-sm" size={32} />,
+            iconBg: "bg-purple-50",
+            content: {
+                intro: "Welcome to the December 2022 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements, key metrics, and notable highlights for the month. Let's dive into the numbers and celebrate our collective successes.\n\nWe're proud to report a customer satisfaction rate of 94%, reflecting our commitment to delivering exceptional service. Thank you to the entire team for your dedication to customer success.\n\nYour feedback is invaluable to us. If you have any suggestions or insights regarding our performance or areas of improvement, please feel free to share them with the HR department.\n\nFollow us on social media for real-time updates and behind-the-scenes glimpses of our team in action.",
+                bullets: [
+                    "Launching the customer loyalty program.",
+                    "Expanding our online presence through targeted social media campaigns.",
+                    "Improving communication channels between departments."
+                ],
+                recognition: "Employee of the Month: Congratulations to Michael Turner for their exceptional dedication, hard work, and positive impact on the team. Your efforts do not go unnoticed.\n\nTeam Milestones: The product development team reached a significant milestone this month, successfully launching our new product line. The collective effort and collaboration are commendable."
+            }
+        },
+        {
+            id: 5,
+            version: "Vol 00",
+            title: "Monthly Performance Reporting",
+            summary: "Welcome to the November 2022 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements...",
+            icon: <Package className="text-pink-500 drop-shadow-sm" size={32} />,
+            iconBg: "bg-pink-50",
+            content: {
+                intro: "Welcome to the November 2022 edition of the Acme Innovations Monthly Performance Report. This newsletter provides a comprehensive overview of our achievements, key metrics, and notable highlights for the month. Let's dive into the numbers and celebrate our collective successes.\n\nWe're proud to report a customer satisfaction rate of 94%, reflecting our commitment to delivering exceptional service. Thank you to the entire team for your dedication to customer success.\n\nYour feedback is invaluable to us. If you have any suggestions or insights regarding our performance or areas of improvement, please feel free to share them with the HR department.\n\nFollow us on social media for real-time updates and behind-the-scenes glimpses of our team in action.",
+                bullets: [
+                    "Launching the customer loyalty program.",
+                    "Expanding our online presence through targeted social media campaigns.",
+                    "Improving communication channels between departments."
+                ],
+                recognition: "Employee of the Month: Congratulations to Michael Turner for their exceptional dedication, hard work, and positive impact on the team. Your efforts do not go unnoticed.\n\nTeam Milestones: The product development team reached a significant milestone this month, successfully launching our new product line. The collective effort and collaboration are commendable."
+            }
+        }
+    ];
+
+    const currentNewsletters = dummyNewsletters.slice(0, visibleCount);
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -144,6 +240,117 @@ export default function Impact() {
                         </motion.div>
                     ))}
                 </div>
+            </section>
+
+            {/* 2.5. MONTHLY IMPACT NEWSLETTERS SECTION (Card Style with Expand & Paginate) */}
+            <section className="py-24 bg-white relative z-20 border-t border-gray-100">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center mb-16">
+                        <h2 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-6">
+                            Monthly Impact Report
+                        </h2>
+                        <p className="text-gray-600 font-medium text-lg leading-relaxed max-w-2xl mx-auto">
+                            Our platform goes far beyond basic listing interfaces, integrating deep engineering concepts to build a resilient humanitarian network.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                        {currentNewsletters.map((nl) => (
+                            <div
+                                key={nl.id}
+                                onClick={() => setExpandedNewsletter(nl)}
+                                className="bg-white rounded-2xl p-8 border border-gray-200 shadow-sm hover:shadow-md transition-all cursor-pointer relative group flex flex-col items-center text-center h-full"
+                            >
+                                <span className="absolute top-4 right-4 bg-gray-50 text-gray-500 text-[10px] font-bold px-2 py-1 rounded-md border border-gray-100">{nl.version}</span>
+                                <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-transform group-hover:scale-110 ${nl.iconBg}`}>
+                                    {nl.icon}
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900 mb-3">{nl.title}</h3>
+                                <p className="text-sm text-gray-500 leading-relaxed font-medium">
+                                    {nl.summary}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Pagination Controls */}
+                    {visibleCount < dummyNewsletters.length && (
+                        <div className="flex justify-center">
+                            <button
+                                onClick={() => setVisibleCount(prev => prev + 3)}
+                                className="bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 font-bold py-3 px-8 rounded-xl transition-colors shadow-sm"
+                            >
+                                View Next 3
+                            </button>
+                        </div>
+                    )}
+                    {visibleCount >= dummyNewsletters.length && dummyNewsletters.length > 3 && (
+                        <div className="flex justify-center">
+                            <button
+                                onClick={() => setVisibleCount(3)}
+                                className="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 font-bold py-3 px-8 rounded-xl transition-colors shadow-sm"
+                            >
+                                Show Less
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* EXPANDED NEWSLETTER MODAL */}
+                {expandedNewsletter && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden relative"
+                        >
+                            <button
+                                onClick={() => setExpandedNewsletter(null)}
+                                className="absolute top-6 right-6 bg-gray-100 hover:bg-gray-200 p-2 rounded-full text-gray-600 transition-colors z-10"
+                            >
+                                <X size={20} />
+                            </button>
+
+                            <div className="flex flex-col md:flex-row">
+                                <div className={`md:w-1/3 p-10 flex flex-col items-center justify-center sm:border-r border-gray-100 ${expandedNewsletter.iconBg.replace('/10', '/30')}`}>
+                                    <div className="w-32 h-32 rounded-full bg-white flex items-center justify-center shadow-inner mb-6">
+                                        {expandedNewsletter.icon}
+                                    </div>
+                                    <span className="bg-white px-4 py-1.5 rounded-full text-sm font-bold shadow-sm mb-4">{expandedNewsletter.version}</span>
+                                    <h3 className="text-2xl font-black text-center text-gray-900">{expandedNewsletter.title}</h3>
+                                </div>
+
+                                <div className="md:w-2/3 p-10">
+                                    <div className="mb-8">
+                                        <h4 className="text-sm font-bold text-emerald-600 uppercase tracking-widest mb-2">Executive Summary</h4>
+                                        <p className="text-gray-700 leading-relaxed font-medium text-lg">
+                                            {expandedNewsletter.content.intro}
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 mb-8">
+                                        <h4 className="text-sm font-bold text-gray-900 mb-4">Focus Areas & Goals:</h4>
+                                        <ul className="space-y-3">
+                                            {expandedNewsletter.content.bullets.map((bullet, i) => (
+                                                <li key={i} className="flex items-start gap-3">
+                                                    <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 shrink-0" />
+                                                    <span className="text-gray-600 text-sm font-medium leading-snug">{bullet}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+
+                                    <div>
+                                        <h4 className="text-sm font-bold text-gray-900 mb-2">Community Recognition</h4>
+                                        <p className="text-gray-600 text-sm leading-relaxed">
+                                            {expandedNewsletter.content.recognition}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
             </section>
 
             {/* 3. SUCCESS STORIES SECTION */}

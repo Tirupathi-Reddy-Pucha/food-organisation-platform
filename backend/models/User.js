@@ -31,6 +31,8 @@ const UserSchema = new mongoose.Schema({
   isTrained: { type: Boolean, default: false },
   credits: { type: Number, default: 0 },
   servedGroups: { type: String, default: 'General' },
+  maxWeight: { type: Number, default: 0 },
+  maxServings: { type: Number, default: 0 },
 
   ngoCapacity: {
     fridge: { type: String, default: '' },

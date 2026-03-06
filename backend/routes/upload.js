@@ -9,9 +9,9 @@ const router = express.Router();
 
 // 1. Configure Cloudinary
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
-  api_key: process.env.CLOUDINARY_API_KEY, 
-  api_secret: process.env.CLOUDINARY_API_SECRET 
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
 // 2. Configure Storage Engine
@@ -20,6 +20,7 @@ const storage = new CloudinaryStorage({
   params: {
     folder: 'food_connect_donations',
     allowed_formats: ['jpg', 'png', 'jpeg'],
+    transformation: [{ width: 800, height: 800, crop: 'limit', quality: 'auto' }]
   },
 });
 
