@@ -39,10 +39,19 @@ router.post('/register', async (req, res) => {
 
         console.log(`📧 New User Registered: ${email}`);
 
+        // --- REAL EMAIL NOTIFICATION ---
+        const { sendEmail } = await import('../utils/email.js');
+        await sendEmail({
+            to: email,
+            subject: 'Welcome to Food Waste Platform!',
+            text: `Hi ${name},\n\nWelcome to our platform! Thank you for joining us as a ${role}. Your account is currently pending verification if you are an NGO or Volunteer. Feel free to explore the dashboard in the meantime.`,
+            html: `<h1>Welcome to Food Waste Platform!</h1><p>Hi ${name},</p><p>Thank you for joining us as a <strong>${role}</strong>. Your account is currently pending verification if you are an NGO or Volunteer. Feel free to explore the dashboard in the meantime.</p>`
+        });
+
         const payload = { user: { id: user.id, role: user.role } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' }, (err, token) => {
             if (err) throw err;
-            res.json({ token, user: { id: user.id, name: user.name, role: user.role, credits: user.credits, isAvailable: user.isAvailable } });
+            res.json({ token, user: { id: user.id, name: user.name, role: user.role, credits: user.credits, isAvailable: user.isAvailable, location: user.location, serviceRadius: user.serviceRadius } });
         });
     } catch (err) {
         console.error(err.message);
@@ -101,7 +110,9 @@ router.post('/login', async (req, res) => {
                     verificationDocument: user.verificationDocument,
                     streakCount: user.streakCount,
                     badges: user.badges || [], // NEW
-                    totalDeliveries: user.totalDeliveries || 0 // NEW
+                    totalDeliveries: user.totalDeliveries || 0, // NEW
+                    location: user.location, // NEW
+                    serviceRadius: user.serviceRadius // NEW
                 }
             });
         });

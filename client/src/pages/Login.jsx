@@ -46,6 +46,10 @@ export default function Login() {
       if (user.badges) localStorage.setItem('user_badges', JSON.stringify(user.badges));
       if (user.totalDeliveries !== undefined) localStorage.setItem('user_totalDeliveries', user.totalDeliveries);
 
+      // NEW: Store location for Route Optimizer
+      if (user.location) localStorage.setItem('user_location', JSON.stringify(user.location));
+      if (user.serviceRadius) localStorage.setItem('user_radius', user.serviceRadius);
+
       // Navigate to dashboard and refresh to update navbar state
       navigate('/dashboard');
       window.location.reload();

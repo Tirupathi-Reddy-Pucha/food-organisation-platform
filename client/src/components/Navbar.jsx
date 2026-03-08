@@ -171,9 +171,13 @@ export default function Navbar() {
               </AnimatePresence>
             </div>
 
-            {/* Dashboard Link (If logged in) */}
             {user && (
-              <NavLink to="/dashboard">Dashboard</NavLink>
+              <>
+                <NavLink to="/dashboard">Dashboard</NavLink>
+                {user.role === 'Volunteer' && (
+                  <NavLink to="/optimize-route">Route Optimizer</NavLink>
+                )}
+              </>
             )}
           </div>
 
@@ -245,7 +249,14 @@ export default function Navbar() {
               <Link to="/solutions/restaurants" className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-xl ml-2">For Restaurants</Link>
               <Link to="/solutions/ngos" className="px-4 py-2 text-gray-600 hover:bg-gray-50 rounded-xl ml-2">For NGOs</Link>
 
-              {user && <Link to="/dashboard" className="px-4 py-3 rounded-xl font-medium text-gray-600 hover:bg-gray-50 mt-2">Dashboard</Link>}
+              {user && (
+                <>
+                  <Link to="/dashboard" className="px-4 py-3 rounded-xl font-medium text-gray-600 hover:bg-gray-50 mt-2">Dashboard</Link>
+                  {user.role === 'Volunteer' && (
+                    <Link to="/optimize-route" className="px-4 py-3 rounded-xl font-medium text-gray-600 hover:bg-gray-50">Route Optimizer</Link>
+                  )}
+                </>
+              )}
             </div>
 
             <div className="px-4 py-3 border-t border-gray-100 mt-2">

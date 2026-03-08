@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
 import QRCode from 'react-qr-code';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
@@ -8,7 +9,7 @@ import L from 'leaflet';
 import { calculateDistance } from '../utils/haversine';
 
 // Icons for the Dashboard UI
-import { LayoutDashboard, Heart, History, UserCircle, PlusCircle, LogOut, Bell, ShieldAlert, MapPin, CheckCircle2, Clock, Menu, X, Info, Leaf, Trash2, HelpCircle } from 'lucide-react';
+import { LayoutDashboard, Heart, History, UserCircle, PlusCircle, LogOut, Bell, ShieldAlert, MapPin, CheckCircle2, Clock, Menu, X, Info, Leaf, Trash2, HelpCircle, Navigation } from 'lucide-react';
 
 // Import Leaflet Images (Vite/Webpack compatible)
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -1044,13 +1045,19 @@ export default function Dashboard() {
             if (!favorites.includes(item._id || item.id)) return false;
         } else if (view === 'feed') {
             if (item.status === 'Delivered') return false; // Exclude delivered from feed
-            if (item.status !== 'Available') {
-                const isRelevant = user.role === 'Volunteer' ||
-                    (user.role === 'NGO' && (isSameUser(item.claimedBy, user.id) || isSameUser(item.reservedBy, user.id))) ||
+
+            // NEW: Restricted Feed for Volunteers (Task 10.1)
+            if (user.role === 'Volunteer') {
+                // Volunteers ONLY see items after an NGO has claimed them
+                if (item.status !== 'Claimed' && item.status !== 'In Transit') return false;
+            } else if (item.status !== 'Available') {
+                // NGOs and Donors see items they are involved with if not Available
+                const isRelevant = (user.role === 'NGO' && (isSameUser(item.claimedBy, user.id) || isSameUser(item.reservedBy, user.id))) ||
                     (user.role === 'Donor' && isSameUser(item.donor, user.id));
                 if (!isRelevant) return false;
             }
-        } else if (view === 'history') {
+        }
+        else if (view === 'history') {
             // Already filtered by myListings if view is history, but just in case
             const isRelated = isSameUser(item.donor, user.id) || isSameUser(item.claimedBy, user.id) || isSameUser(item.collectedBy, user.id);
             if (!isRelated) return false;
@@ -1111,9 +1118,14 @@ export default function Dashboard() {
                                 <PlusCircle size={20} /> Post Donation
                             </button>
                         )}
+                        {user.role === 'Volunteer' && (
+                            <Link to="/optimize-route" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold bg-emerald-600 text-white shadow-md hover:bg-emerald-700 transition-all mt-4 mb-2">
+                                <MapPin size={20} /> Route Optimizer 🗺️
+                            </Link>
+                        )}
                         {user.role === 'NGO' && (
                             <>
-                                <button onClick={() => setView('request')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors mt-4 ${view === 'request' ? 'bg-orange-600 text-white shadow-md' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}>
+                                <button onClick={() => setView('request')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-colors mt-2 ${view === 'request' ? 'bg-orange-600 text-white shadow-md' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`}>
                                     <PlusCircle size={20} /> Request Food
                                 </button>
                                 <button onClick={() => setView('my-requests')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${view === 'my-requests' ? 'bg-emerald-50 text-emerald-800' : 'text-gray-600 hover:bg-gray-50'}`}>
@@ -1152,9 +1164,10 @@ export default function Dashboard() {
                             <button onClick={() => setView('favorites')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium ${view === 'favorites' ? 'bg-emerald-50 text-emerald-800' : 'text-gray-600'}`}><Heart size={20} /> Saved Items</button>
                             <button onClick={() => setView('history')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium ${view === 'history' ? 'bg-emerald-50 text-emerald-800' : 'text-gray-600'}`}><History size={20} /> History</button>
                             {user.role === 'Donor' && <button onClick={() => { setView('donate'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold bg-emerald-100 text-emerald-800 mt-4"><PlusCircle size={20} /> Post Donation</button>}
+                            {user.role === 'Volunteer' && <Link to="/optimize-route" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold bg-emerald-600 text-white mt-4"><MapPin size={20} /> Route Optimizer 🗺️</Link>}
                             {user.role === 'NGO' && (
                                 <>
-                                    <button onClick={() => { setView('request'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold bg-orange-100 text-orange-800 mt-4"><PlusCircle size={20} /> Request Food</button>
+                                    <button onClick={() => { setView('request'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold bg-orange-100 text-orange-800 mt-2"><PlusCircle size={20} /> Request Food</button>
                                     <button onClick={() => { setView('my-requests'); setMobileMenuOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-gray-600"><History size={20} /> My Requests</button>
                                 </>
                             )}
@@ -1500,6 +1513,25 @@ export default function Dashboard() {
                                 {/* Stats Bento Box */}
                                 {view === 'feed' && (
                                     <>
+                                        {user.role === 'Volunteer' && (
+                                            <div className="bg-gradient-to-r from-emerald-800 to-emerald-600 rounded-3xl p-6 text-white mb-8 relative overflow-hidden shadow-lg shadow-emerald-900/20">
+                                                <div className="absolute right-0 top-0 w-32 h-32 bg-white opacity-10 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
+                                                <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
+                                                            <Navigation size={32} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-xl font-bold">Plan Your Route</h3>
+                                                            <p className="text-emerald-50 text-sm opacity-90">Visit multiple pickups in the most efficient order.</p>
+                                                        </div>
+                                                    </div>
+                                                    <Link to="/optimize-route" className="w-full md:w-auto bg-white text-emerald-800 font-bold px-6 py-3 rounded-xl hover:bg-emerald-50 transition-all text-center">
+                                                        Open Route Optimizer
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col justify-center">
                                                 <span className="text-sm text-gray-500 font-medium mb-1">Total Deliveries</span>

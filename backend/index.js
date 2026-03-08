@@ -11,6 +11,7 @@ import uploadRoutes from './routes/upload.js';
 import bugRoutes from './routes/bugs.js';
 import notificationRoutes from './routes/notifications.js';
 import foodNeedRoutes from './routes/foodNeeds.js';
+import routingRoutes from './routes/routing.js';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/bugs', bugRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/food-needs', foodNeedRoutes);
+app.use('/api/routing', routingRoutes);
 
 const PORT = process.env.PORT || 5000;
 

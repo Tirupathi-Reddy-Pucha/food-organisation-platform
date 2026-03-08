@@ -61,8 +61,8 @@ router.get('/', async (req, res) => {
         const listings = await FoodListing.find(query)
             .sort({ createdAt: -1 })
             .populate('donor', 'name phone address createdAt isVerified')
-            .populate('claimedBy', 'name phone address ngoRegNumber')
-            .populate('collectedBy', 'name phone address');
+            .populate('claimedBy', 'name phone address location ngoRegNumber')
+            .populate('collectedBy', 'name phone address location');
 
         // Smart Expiry & Reservation Logic
         const currentTime = Date.now();
@@ -469,17 +469,22 @@ router.put('/:id/status', auth, async (req, res) => {
             listing.isReadyForPickup = true;
             console.log(`📡 [SMS ALERT] To Volunteer/NGO: "Food ${listing.title} is ready for pickup! Generate QR now."`);
 
-            // UI Notification for NGO
-            if (listing.claimedBy) {
-                await new Notification({
-                    recipient: listing.claimedBy,
-                    msg: `🍴 Food listing "${listing.title}" is ready for pickup!`,
-                    type: 'Info'
-                }).save();
+            // REAL EMAIL NOTIFICATION for NGO
+            const ngo = await User.findById(listing.claimedBy);
+            if (ngo && ngo.email) {
+                const { sendEmail } = await import('../utils/email.js');
+                await sendEmail({
+                    to: ngo.email,
+                    subject: `🍴 Pickup Ready: ${listing.title}`,
+                    text: `Hi ${ngo.name},\n\nThe donor has marked "${listing.title}" as ready for pickup. You can now generate the QR code and arrange for collection.`,
+                    html: `<h2>Pickup Ready!</h2><p>Hi ${ngo.name},</p><p>The donor has marked <strong>${listing.title}</strong> as ready for pickup. You can now generate the QR code and arrange for collection.</p>`
+                });
             }
         }
 
         if (status === 'Cancelled') listing.cancellationReason = reason;
+
+
 
         if (status === 'Claimed') {
             // Validation for 10-Minute Reservation Lock (Task 3.2.3)
@@ -571,7 +576,20 @@ router.put('/:id/status', auth, async (req, res) => {
         }
 
         if (status === 'Claimed') {
+            const donor = await User.findById(listing.donor);
+            const ngo = await User.findById(req.user.id);
             console.log(`📱 [SMS ALERT] To Donor: "Your food ${listing.title} has been claimed by an NGO! Please have it ready."`);
+
+            if (donor && donor.email) {
+                const { sendEmail } = await import('../utils/email.js');
+                await sendEmail({
+                    to: donor.email,
+                    subject: `✅ Donation Claimed: ${listing.title}`,
+                    text: `Hi ${donor.name},\n\nYour donation "${listing.title}" has been claimed by ${ngo ? ngo.name : 'an NGO'}. Please have it ready for pickup!`,
+                    html: `<h2>Good News!</h2><p>Hi ${donor.name},</p><p>Your donation <strong>${listing.title}</strong> has been claimed by <strong>${ngo ? ngo.name : 'an NGO'}</strong>. Please have it ready for pickup!</p>`
+                });
+            }
+
             const claimer = await User.findById(req.user.id);
             await new Notification({
                 recipient: listing.donor,
@@ -580,7 +598,20 @@ router.put('/:id/status', auth, async (req, res) => {
             }).save();
         }
         if (status === 'In Transit') {
+            const ngo = await User.findById(listing.claimedBy);
+            const volunteer = await User.findById(req.user.id);
             console.log(`📱 [SMS ALERT] To NGO: "A volunteer has picked up ${listing.title}. It is on the way!"`);
+
+            if (ngo && ngo.email) {
+                const { sendEmail } = await import('../utils/email.js');
+                await sendEmail({
+                    to: ngo.email,
+                    subject: `🚚 Delivery on its way: ${listing.title}`,
+                    text: `Hi ${ngo.name},\n\nVolunteer ${volunteer ? volunteer.name : 'Someone'} has picked up your donation "${listing.title}" and is on the way to you!`,
+                    html: `<h2>Delivery in Transit</h2><p>Hi ${ngo.name},</p><p>Volunteer <strong>${volunteer ? volunteer.name : 'Someone'}</strong> has picked up your donation <strong>${listing.title}</strong> and is on the way to you!</p>`
+                });
+            }
+
             if (listing.claimedBy) {
                 await new Notification({
                     recipient: listing.claimedBy,
@@ -590,7 +621,20 @@ router.put('/:id/status', auth, async (req, res) => {
             }
         }
         if (status === 'Delivered') {
+            const donor = await User.findById(listing.donor);
+            const ngo = await User.findById(listing.claimedBy);
             console.log(`📱 [SMS ALERT] To Donor: "Great news! Your donation has reached its destination."`);
+
+            const { sendEmail } = await import('../utils/email.js');
+            if (donor && donor.email) {
+                await sendEmail({
+                    to: donor.email,
+                    subject: `🎉 Donation Delivered: ${listing.title}`,
+                    text: `Hi ${donor.name},\n\nGreat news! Your donation "${listing.title}" has been successfully delivered. Thank you for your contribution!`,
+                    html: `<h2>Success!</h2><p>Hi ${donor.name},</p><p>Great news! Your donation <strong>${listing.title}</strong> has been successfully delivered. Thank you for your contribution!</p>`
+                });
+            }
+
             await new Notification({
                 recipient: listing.donor,
                 msg: `🎉 Your donation "${listing.title}" has been successfully delivered!`,
@@ -598,6 +642,14 @@ router.put('/:id/status', auth, async (req, res) => {
             }).save();
 
             if (listing.claimedBy) {
+                if (ngo && ngo.email) {
+                    await sendEmail({
+                        to: ngo.email,
+                        subject: `🍽️ Food Delivered: ${listing.title}`,
+                        text: `Hi ${ngo.name},\n\nThe food donation "${listing.title}" has arrived at your location.`,
+                        html: `<h2>Arrived!</h2><p>Hi ${ngo.name},</p><p>The food donation <strong>${listing.title}</strong> has arrived at your location.</p>`
+                    });
+                }
                 await new Notification({
                     recipient: listing.claimedBy,
                     msg: `🍽️ The food "${listing.title}" has been delivered to your location.`,

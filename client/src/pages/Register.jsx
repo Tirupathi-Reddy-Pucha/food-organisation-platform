@@ -35,17 +35,17 @@ export default function Register() {
 
     try {
       const payload = {
-        name: formData.name, 
-        email: formData.email, 
-        password: formData.password, 
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
         role: role,
-        phone: formData.phone, 
-        address: formData.address, 
+        phone: formData.phone,
+        address: formData.address,
         ngoRegNumber: formData.ngoNumb
       };
 
       const res = await axios.post(`${API_URL}/auth/register`, payload);
-      
+
       // Store user data in local storage mimicking your Dashboard logic
       const { user, token } = res.data;
       localStorage.setItem('token', token);
@@ -60,9 +60,13 @@ export default function Register() {
       localStorage.setItem('user_trained', user.isTrained);
       localStorage.setItem('user_credits', user.credits || 0);
 
+      // NEW: Store location for Route Optimizer
+      if (user.location) localStorage.setItem('user_location', JSON.stringify(user.location));
+      if (user.serviceRadius) localStorage.setItem('user_radius', user.serviceRadius);
+
       // Navigate to dashboard and refresh to update navbar state
       navigate('/dashboard');
-      window.location.reload(); 
+      window.location.reload();
 
     } catch (err) {
       console.error("Registration failed:", err);
@@ -80,19 +84,19 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex bg-white font-sans">
-      
+
       {/* Left Image Section */}
       <div className="hidden lg:flex w-5/12 bg-emerald-950 relative overflow-hidden">
-        <img 
-          src="https://images.unsplash.com/photo-1559027615-cd4628902d4a?q=80&w=2074&auto=format&fit=crop" 
-          alt="Community Kitchen" 
+        <img
+          src="https://images.unsplash.com/photo-1559027615-cd4628902d4a?q=80&w=2074&auto=format&fit=crop"
+          alt="Community Kitchen"
           className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-40"
         />
         <div className="relative z-10 p-16 flex flex-col h-full justify-between">
           <Link to="/" className="flex items-center text-emerald-100 hover:text-white transition-colors text-sm font-bold w-fit">
             <ArrowLeft size={16} className="mr-2" /> Home
           </Link>
-          
+
           <div>
             <h2 className="text-4xl font-extrabold text-white mb-4">Join the Ecosystem.</h2>
             <p className="text-emerald-200 text-lg leading-relaxed max-w-sm">
@@ -108,7 +112,7 @@ export default function Register() {
           <ArrowLeft size={16} className="mr-2" /> Home
         </Link>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
@@ -128,7 +132,7 @@ export default function Register() {
           )}
 
           <form onSubmit={handleRegister} className="space-y-6">
-            
+
             {/* Role Selector */}
             <div className="bg-gray-100 p-1.5 rounded-2xl flex items-center justify-between mb-8">
               {roles.map((r) => (
@@ -136,11 +140,10 @@ export default function Register() {
                   key={r.id}
                   type="button"
                   onClick={() => { setRole(r.id); setError(null); }}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all duration-300 ${
-                    role === r.id 
-                      ? "bg-white text-emerald-900 shadow-sm border border-gray-200" 
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all duration-300 ${role === r.id
+                      ? "bg-white text-emerald-900 shadow-sm border border-gray-200"
                       : "text-gray-500 hover:text-gray-900"
-                  }`}
+                    }`}
                 >
                   {r.icon} {r.label}
                 </button>
@@ -150,7 +153,7 @@ export default function Register() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Full Name / Org Name</label>
-                <input 
+                <input
                   type="text" name="name" required value={formData.name} onChange={handleChange} disabled={isLoading}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
                   placeholder="John Doe"
@@ -158,7 +161,7 @@ export default function Register() {
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
-                <input 
+                <input
                   type="email" name="email" required value={formData.email} onChange={handleChange} disabled={isLoading}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
                   placeholder="name@example.com"
@@ -169,7 +172,7 @@ export default function Register() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Phone Number</label>
-                <input 
+                <input
                   type="tel" name="phone" required value={formData.phone} onChange={handleChange} disabled={isLoading}
                   className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
                   placeholder="+1 (555) 000-0000"
@@ -178,7 +181,7 @@ export default function Register() {
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
                 <div className="relative">
-                  <input 
+                  <input
                     type={showPassword ? "text" : "password"} name="password" required value={formData.password} onChange={handleChange} disabled={isLoading}
                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all pr-12 disabled:opacity-50"
                     placeholder="••••••••"
@@ -192,7 +195,7 @@ export default function Register() {
 
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Address / Location</label>
-              <input 
+              <input
                 type="text" name="address" required value={formData.address} onChange={handleChange} disabled={isLoading}
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
                 placeholder="123 Main St, City, Zip"
@@ -203,7 +206,7 @@ export default function Register() {
               {role === "NGO" && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                   <label className="block text-sm font-bold text-gray-700 mb-2">Govt. Registration Number <span className="text-red-500">*</span></label>
-                  <input 
+                  <input
                     type="text" name="ngoNumb" required={role === "NGO"} value={formData.ngoNumb} onChange={handleChange} disabled={isLoading}
                     className="w-full px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 outline-none transition-all disabled:opacity-50"
                     placeholder="e.g., NGO-12345678"

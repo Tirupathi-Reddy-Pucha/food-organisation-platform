@@ -11,6 +11,7 @@ import Impact from './pages/Impact';
 import Blog from './pages/Blog';
 import Contact from './pages/Contact';
 import Restaurants from './pages/solutions/Restaurants';
+import RouteOptimization from './pages/RouteOptimization';
 
 // Protects the Dashboard: If no token, kick to Login
 const ProtectedRoute = ({ children }) => {
@@ -102,10 +103,19 @@ export default function App() {
           <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
 
           {/* --- PROTECTED ROUTE (Logged In Only) --- */}
-          {/* Notice NO Navbar here! The Dashboard is a full-screen standalone app */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/optimize-route" element={
+            <ProtectedRoute>
+              {(() => {
+                const userObj = JSON.parse(localStorage.getItem('user')) || {};
+                if (userObj.role !== 'Volunteer') return <Navigate to="/dashboard" replace />;
+                return <RouteOptimization />;
+              })()}
             </ProtectedRoute>
           } />
 
