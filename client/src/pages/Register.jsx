@@ -63,6 +63,8 @@ export default function Register() {
       // NEW: Store location for Route Optimizer
       if (user.location) localStorage.setItem('user_location', JSON.stringify(user.location));
       if (user.serviceRadius) localStorage.setItem('user_radius', user.serviceRadius);
+      if (user.maxWeight !== undefined) localStorage.setItem('user_maxWeight', user.maxWeight);
+      if (user.maxServings !== undefined) localStorage.setItem('user_maxServings', user.maxServings);
 
       // Navigate to dashboard and refresh to update navbar state
       navigate('/dashboard');
@@ -141,8 +143,8 @@ export default function Register() {
                   type="button"
                   onClick={() => { setRole(r.id); setError(null); }}
                   className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold transition-all duration-300 ${role === r.id
-                      ? "bg-white text-emerald-900 shadow-sm border border-gray-200"
-                      : "text-gray-500 hover:text-gray-900"
+                    ? "bg-white text-emerald-900 shadow-sm border border-gray-200"
+                    : "text-gray-500 hover:text-gray-900"
                     }`}
                 >
                   {r.icon} {r.label}

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import axios from 'axios';
 import L from 'leaflet';
-import { Navigation, MapPin, List, Play, CheckCircle2, Clock, Navigation2, X } from 'lucide-react';
+import { Navigation, MapPin, List, Play, CheckCircle2, Clock, Navigation2, X, AlertTriangle, Package, Users } from 'lucide-react';
+import { calculateDistance } from '../utils/haversine';
 
 // Fix Leaflet marker icon issue
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -37,6 +38,15 @@ const RouteOptimization = () => {
     const [error, setError] = useState(null);
     const [stats, setStats] = useState({ distance: 0, duration: 0, sequence: [], fullCoords: [] });
 
+    // Capacity & Range State
+    const [capacity, setCapacity] = useState({
+        maxWeight: parseFloat(localStorage.getItem('user_maxWeight') || '0'),
+        maxServings: parseInt(localStorage.getItem('user_maxServings') || '0'),
+        radius: parseInt(localStorage.getItem('user_radius') || '5')
+    });
+
+    const [currentLoad, setCurrentLoad] = useState({ weight: 0, servings: 0 });
+
     useEffect(() => {
         const userId = localStorage.getItem('user_id');
         if (userId) {
@@ -57,15 +67,43 @@ const RouteOptimization = () => {
                 setUserLocation(loc);
             }
         }
-        fetchListings();
     }, []);
+
+    // Fetch listings when userLocation or radius changes
+    useEffect(() => {
+        if (userLocation) {
+            fetchListings();
+        }
+    }, [userLocation, capacity.radius]);
+
+    // Update current load whenever selectedPoints change
+    useEffect(() => {
+        const load = selectedPoints.reduce((acc, p) => {
+            const weight = p.unit === 'kg' || p.unit === 'litres' ? p.quantity : 0;
+            const servings = p.unit === 'servings' ? p.quantity : 0;
+            return {
+                weight: acc.weight + weight,
+                servings: acc.servings + servings
+            };
+        }, { weight: 0, servings: 0 });
+        setCurrentLoad(load);
+    }, [selectedPoints]);
 
     const fetchListings = async () => {
         try {
             const res = await axios.get(`${API_BASE_URL}/listings`);
             const claimedListings = res.data.filter(l => {
                 if (!l.location || !l.location.lat || !l.location.lng) return false;
-                return l.status === 'Claimed' || l.status === 'In Transit';
+
+                // 1. Volunteer only sees claimed items ready for delivery
+                const isClaimed = l.status === 'Claimed' || l.status === 'In Transit';
+                if (!isClaimed) return false;
+
+                // 2. Filter by distance (Service Radius)
+                const dist = calculateDistance(userLocation.lat, userLocation.lng, l.location.lat, l.location.lng);
+                l.distanceFromVolunteer = dist; // Attach distance for UI
+
+                return dist <= capacity.radius;
             });
             setListings(claimedListings);
         } catch (err) {
@@ -174,38 +212,114 @@ const RouteOptimization = () => {
 
             <div className="flex-1 flex overflow-hidden">
                 <div className="w-80 bg-white border-r overflow-y-auto p-4 lg:block hidden">
+                    {/* Capacity Monitor */}
+                    <div className="mb-6 bg-slate-900 rounded-3xl p-5 text-white shadow-xl">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                            <Package size={14} /> Batch Capacity
+                        </h3>
+
+                        <div className="space-y-4">
+                            {/* Weight Progress */}
+                            <div>
+                                <div className="flex justify-between text-[10px] mb-1">
+                                    <span className="font-bold">TOTAL WEIGHT</span>
+                                    <span className={currentLoad.weight > capacity.maxWeight ? 'text-red-400' : 'text-emerald-400'}>
+                                        {currentLoad.weight} / {capacity.maxWeight} kg
+                                    </span>
+                                </div>
+                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full transition-all duration-500 ${currentLoad.weight > capacity.maxWeight ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                        style={{ width: `${Math.min((currentLoad.weight / (capacity.maxWeight || 1)) * 100, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+
+                            {/* Servings Progress */}
+                            <div>
+                                <div className="flex justify-between text-[10px] mb-1">
+                                    <span className="font-bold">TOTAL SERVINGS</span>
+                                    <span className={currentLoad.servings > capacity.maxServings ? 'text-red-400' : 'text-emerald-400'}>
+                                        {currentLoad.servings} / {capacity.maxServings}
+                                    </span>
+                                </div>
+                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                    <div
+                                        className={`h-full transition-all duration-500 ${currentLoad.servings > capacity.maxServings ? 'bg-red-500' : 'bg-blue-500'}`}
+                                        style={{ width: `${Math.min((currentLoad.servings / (capacity.maxServings || 1)) * 100, 100)}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {(currentLoad.weight > capacity.maxWeight || currentLoad.servings > capacity.maxServings) && (
+                            <div className="mt-4 flex items-center gap-2 text-[10px] text-red-400 font-bold bg-red-400/10 p-2 rounded-lg border border-red-400/20">
+                                <AlertTriangle size={12} />
+                                <span>Capacity Exceeded!</span>
+                            </div>
+                        )}
+                    </div>
+
                     <h2 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
                         📦 Claimed Listings ({listings.length})
                     </h2>
                     {listings.length === 0 ? (
                         <div className="bg-gray-50 p-6 rounded-2xl text-center border border-dashed border-gray-200">
-                            <p className="text-sm text-gray-400 italic">No claimed listings available for delivery.</p>
+                            <p className="text-sm text-gray-400 italic">No claimed listings within {capacity.radius}km.</p>
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {listings.map(item => (
-                                <div
-                                    key={item._id}
-                                    onClick={() => {
-                                        if (selectedPoints.find(p => p._id === item._id)) {
-                                            setSelectedPoints(selectedPoints.filter(p => p._id !== item._id));
-                                        } else {
-                                            setSelectedPoints([...selectedPoints, item]);
-                                        }
-                                    }}
-                                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${selectedPoints.find(p => p._id === item._id) ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-white border-gray-100 hover:border-emerald-200'}`}
-                                >
-                                    <h3 className="font-bold text-gray-900 text-sm truncate">{item.title}</h3>
-                                    <div className="flex items-center gap-1 mt-1">
-                                        <MapPin size={12} className="text-gray-400" />
-                                        <p className="text-xs text-gray-500 truncate">{item.donor?.address || 'Pickup address unknown'}</p>
+                            {listings.map(item => {
+                                const isSelected = selectedPoints.find(p => p._id === item._id);
+                                const itemWeight = item.unit === 'kg' || item.unit === 'litres' ? item.quantity : 0;
+                                const itemServings = item.unit === 'servings' ? item.quantity : 0;
+
+                                return (
+                                    <div
+                                        key={item._id}
+                                        onClick={() => {
+                                            if (isSelected) {
+                                                setSelectedPoints(selectedPoints.filter(p => p._id !== item._id));
+                                            } else {
+                                                // Validation check before selecting
+                                                const willExceedWeight = (currentLoad.weight + itemWeight) > capacity.maxWeight;
+                                                const willExceedServings = (currentLoad.servings + itemServings) > capacity.maxServings;
+
+                                                if (willExceedWeight || willExceedServings) {
+                                                    setError(`Adding this would exceed your ${willExceedWeight ? 'weight' : 'servings'} capacity!`);
+                                                    return;
+                                                }
+                                                setSelectedPoints([...selectedPoints, item]);
+                                                setError(null);
+                                            }
+                                        }}
+                                        className={`p-4 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-white border-gray-100 hover:border-emerald-200'}`}
+                                    >
+                                        <div className="flex justify-between items-start mb-1">
+                                            <h3 className="font-bold text-gray-900 text-sm truncate flex-1">{item.title}</h3>
+                                            <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                                                {item.distanceFromVolunteer} km
+                                            </span>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-2">
+                                            <div className="flex items-center gap-1 font-semibold">
+                                                <Package size={10} className="text-gray-400" />
+                                                {item.quantity} {item.unit}
+                                            </div>
+                                            <div className="flex items-center gap-1 font-semibold">
+                                                <Users size={10} className="text-gray-400" />
+                                                Target: {item.claimedBy?.name || 'NGO'}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-1">
+                                            <MapPin size={12} className="text-gray-400" />
+                                            <p className="text-[10px] text-gray-500 truncate">{item.donor?.address || 'Pickup address unknown'}</p>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1 mt-1">
-                                        <CheckCircle2 size={12} className="text-emerald-500" />
-                                        <p className="text-[10px] font-bold text-emerald-600 uppercase">NGO: {item.claimedBy?.name || 'Unknown'}</p>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
@@ -260,19 +374,32 @@ const RouteOptimization = () => {
                             >
                                 <Popup>
                                     <div className="font-bold">{item.title}</div>
-                                    <div className="text-xs text-emerald-600 font-bold">Status: {item.status}</div>
-                                    <div className="text-xs">Donor: {item.donor?.name}</div>
+                                    <div className="text-[10px] text-emerald-600 font-bold mb-1">Status: {item.status}</div>
+                                    <div className="text-[10px] text-gray-500 mb-2">
+                                        Donor: {item.donor?.name || 'Unknown'}<br />
+                                        Distance: {item.distanceFromVolunteer} km<br />
+                                        Load: {item.quantity} {item.unit}
+                                    </div>
                                     <button
                                         onClick={() => {
-                                            if (selectedPoints.find(p => p._id === item._id)) {
+                                            const isSelected = selectedPoints.find(p => p._id === item._id);
+                                            if (isSelected) {
                                                 setSelectedPoints(selectedPoints.filter(p => p._id !== item._id));
                                             } else {
+                                                const itemWeight = item.unit === 'kg' || item.unit === 'litres' ? item.quantity : 0;
+                                                const itemServings = item.unit === 'servings' ? item.quantity : 0;
+
+                                                if ((currentLoad.weight + itemWeight) > capacity.maxWeight || (currentLoad.servings + itemServings) > capacity.maxServings) {
+                                                    setError("This exceeds your carrying capacity!");
+                                                    return;
+                                                }
                                                 setSelectedPoints([...selectedPoints, item]);
+                                                setError(null);
                                             }
                                         }}
-                                        className={`mt-2 w-full py-1 text-xs rounded-lg font-bold ${selectedPoints.find(p => p._id === item._id) ? 'bg-red-50 text-red-600' : 'bg-emerald-600 text-white'}`}
+                                        className={`w-full py-1 text-[10px] rounded-lg font-bold border ${selectedPoints.find(p => p._id === item._id) ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-600 text-white border-emerald-700'}`}
                                     >
-                                        {selectedPoints.find(p => p._id === item._id) ? 'Deselect' : 'Select for Routing'}
+                                        {selectedPoints.find(p => p._id === item._id) ? 'Remove from Batch' : 'Add to Batch'}
                                     </button>
                                 </Popup>
                             </Marker>

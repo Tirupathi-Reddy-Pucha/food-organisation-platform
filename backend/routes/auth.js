@@ -51,7 +51,7 @@ router.post('/register', async (req, res) => {
         const payload = { user: { id: user.id, role: user.role } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' }, (err, token) => {
             if (err) throw err;
-            res.json({ token, user: { id: user.id, name: user.name, role: user.role, credits: user.credits, isAvailable: user.isAvailable, location: user.location, serviceRadius: user.serviceRadius } });
+            res.json({ token, user: { id: user.id, name: user.name, role: user.role, credits: user.credits, isAvailable: user.isAvailable, location: user.location, serviceRadius: user.serviceRadius, maxWeight: user.maxWeight, maxServings: user.maxServings } });
         });
     } catch (err) {
         console.error(err.message);
@@ -112,7 +112,9 @@ router.post('/login', async (req, res) => {
                     badges: user.badges || [], // NEW
                     totalDeliveries: user.totalDeliveries || 0, // NEW
                     location: user.location, // NEW
-                    serviceRadius: user.serviceRadius // NEW
+                    serviceRadius: user.serviceRadius, // NEW
+                    maxWeight: user.maxWeight, // NEW
+                    maxServings: user.maxServings // NEW
                 }
             });
         });

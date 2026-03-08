@@ -49,6 +49,8 @@ export default function Login() {
       // NEW: Store location for Route Optimizer
       if (user.location) localStorage.setItem('user_location', JSON.stringify(user.location));
       if (user.serviceRadius) localStorage.setItem('user_radius', user.serviceRadius);
+      if (user.maxWeight !== undefined) localStorage.setItem('user_maxWeight', user.maxWeight);
+      if (user.maxServings !== undefined) localStorage.setItem('user_maxServings', user.maxServings);
 
       // Navigate to dashboard and refresh to update navbar state
       navigate('/dashboard');
