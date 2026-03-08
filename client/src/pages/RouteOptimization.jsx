@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import axios from 'axios';
 import L from 'leaflet';
-import { Navigation, MapPin, List, Play, CheckCircle2, Clock, Navigation2, X, AlertTriangle, Package, Users } from 'lucide-react';
+import { Navigation, MapPin, List, Play, CheckCircle2, Clock, Navigation2, X, AlertTriangle, Package, Users, ArrowUp, ArrowLeft, ArrowRight, ArrowUpLeft, ArrowUpRight, RotateCcw, Target } from 'lucide-react';
 import { calculateDistance } from '../utils/haversine';
 
 // Fix Leaflet marker icon issue
@@ -38,6 +38,12 @@ const RouteOptimization = () => {
     const [error, setError] = useState(null);
     const [stats, setStats] = useState({ distance: 0, duration: 0, sequence: [], fullCoords: [] });
 
+    // Navigation Step State
+    const [navMode, setNavMode] = useState('route'); // 'route' or 'navigation'
+    const [navigationSteps, setNavigationSteps] = useState([]);
+    const [activeStepIndex, setActiveStepIndex] = useState(0);
+    const [autoTrack, setAutoTrack] = useState(false);
+
     // Capacity & Range State
     const [capacity, setCapacity] = useState({
         maxWeight: parseFloat(localStorage.getItem('user_maxWeight') || '0'),
@@ -68,6 +74,34 @@ const RouteOptimization = () => {
             }
         }
     }, []);
+
+    // Auto-track location effect
+    useEffect(() => {
+        let watchId;
+        if (autoTrack && navigationSteps.length > 0) {
+            watchId = navigator.geolocation.watchPosition(
+                (pos) => {
+                    const { latitude, longitude } = pos.coords;
+                    // Find nearest instruction waypoint (simplified)
+                    let minIdx = 0;
+                    let minDist = 99999;
+                    navigationSteps.forEach((step, idx) => {
+                        const d = calculateDistance(latitude, longitude, step.location[1], step.location[0]);
+                        if (d < minDist) {
+                            minDist = d;
+                            minIdx = idx;
+                        }
+                    });
+                    if (minDist < 0.1) { // 100 meters
+                        setActiveStepIndex(minIdx);
+                    }
+                },
+                (err) => console.error(err),
+                { enableHighAccuracy: true }
+            );
+        }
+        return () => navigator.geolocation.clearWatch(watchId);
+    }, [autoTrack, navigationSteps]);
 
     // Fetch listings when userLocation or radius changes
     useEffect(() => {
@@ -152,17 +186,47 @@ const RouteOptimization = () => {
             const dist = parseFloat(res.data.totalDistance) || 0;
             const dur = parseFloat(res.data.totalDuration) || 0;
 
+            // Extract Navigation Steps
+            const segments = res.data.geojson.features[0].properties.segments;
+            const steps = [];
+            segments.forEach(segment => {
+                segment.steps.forEach(step => {
+                    const point = res.data.geojson.features[0].geometry.coordinates[step.way_points[0]];
+                    steps.push({
+                        ...step,
+                        location: point
+                    });
+                });
+            });
+            setNavigationSteps(steps);
+
             setStats({
                 distance: (dist / 1000).toFixed(2),
                 duration: (dur / 60).toFixed(0),
                 sequence: res.data.optimizedSequence,
                 fullCoords: uniqueCoords
             });
+            setActiveStepIndex(0);
         } catch (err) {
             console.error('Optimization error:', err);
             setError(err.response?.data?.message || 'Failed to optimize route');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const getTurnIcon = (type) => {
+        switch (type) {
+            case 0: case 1: return <ArrowUp size={18} />; // Straight
+            case 2: return <ArrowUpRight size={18} />; // Slight Right
+            case 3: return <ArrowRight size={18} />; // Right
+            case 4: return <ArrowRight size={18} className="rotate-45" />; // Sharp Right
+            case 5: return <ArrowUpLeft size={18} />; // Slight Left
+            case 6: return <ArrowLeft size={18} />; // Left
+            case 7: return <ArrowLeft size={18} className="-rotate-45" />; // Sharp Left
+            case 8: return <RotateCcw size={18} />; // U-turn
+            case 10: return <Target size={18} className="text-emerald-500" />; // Arrival
+            default: return <Navigation2 size={18} />;
         }
     };
 
@@ -212,114 +276,200 @@ const RouteOptimization = () => {
 
             <div className="flex-1 flex overflow-hidden">
                 <div className="w-80 bg-white border-r overflow-y-auto p-4 lg:block hidden">
-                    {/* Capacity Monitor */}
-                    <div className="mb-6 bg-slate-900 rounded-3xl p-5 text-white shadow-xl">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
-                            <Package size={14} /> Batch Capacity
-                        </h3>
-
-                        <div className="space-y-4">
-                            {/* Weight Progress */}
-                            <div>
-                                <div className="flex justify-between text-[10px] mb-1">
-                                    <span className="font-bold">TOTAL WEIGHT</span>
-                                    <span className={currentLoad.weight > capacity.maxWeight ? 'text-red-400' : 'text-emerald-400'}>
-                                        {currentLoad.weight} / {capacity.maxWeight} kg
-                                    </span>
-                                </div>
-                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full transition-all duration-500 ${currentLoad.weight > capacity.maxWeight ? 'bg-red-500' : 'bg-emerald-500'}`}
-                                        style={{ width: `${Math.min((currentLoad.weight / (capacity.maxWeight || 1)) * 100, 100)}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-
-                            {/* Servings Progress */}
-                            <div>
-                                <div className="flex justify-between text-[10px] mb-1">
-                                    <span className="font-bold">TOTAL SERVINGS</span>
-                                    <span className={currentLoad.servings > capacity.maxServings ? 'text-red-400' : 'text-emerald-400'}>
-                                        {currentLoad.servings} / {capacity.maxServings}
-                                    </span>
-                                </div>
-                                <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full transition-all duration-500 ${currentLoad.servings > capacity.maxServings ? 'bg-red-500' : 'bg-blue-500'}`}
-                                        style={{ width: `${Math.min((currentLoad.servings / (capacity.maxServings || 1)) * 100, 100)}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {(currentLoad.weight > capacity.maxWeight || currentLoad.servings > capacity.maxServings) && (
-                            <div className="mt-4 flex items-center gap-2 text-[10px] text-red-400 font-bold bg-red-400/10 p-2 rounded-lg border border-red-400/20">
-                                <AlertTriangle size={12} />
-                                <span>Capacity Exceeded!</span>
-                            </div>
-                        )}
+                    {/* Tabs for Route Selection vs Navigation */}
+                    <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
+                        <button
+                            onClick={() => setNavMode('route')}
+                            className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-bold transition-all ${navMode === 'route' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        >
+                            <List size={14} /> Batch Items
+                        </button>
+                        <button
+                            onClick={() => setNavMode('navigation')}
+                            disabled={navigationSteps.length === 0}
+                            className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-bold transition-all ${navMode === 'navigation' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700 disabled:opacity-50'}`}
+                        >
+                            <Navigation2 size={14} /> Navigation
+                        </button>
                     </div>
 
-                    <h2 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
-                        📦 Claimed Listings ({listings.length})
-                    </h2>
-                    {listings.length === 0 ? (
-                        <div className="bg-gray-50 p-6 rounded-2xl text-center border border-dashed border-gray-200">
-                            <p className="text-sm text-gray-400 italic">No claimed listings within {capacity.radius}km.</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {listings.map(item => {
-                                const isSelected = selectedPoints.find(p => p._id === item._id);
-                                const itemWeight = item.unit === 'kg' || item.unit === 'litres' ? item.quantity : 0;
-                                const itemServings = item.unit === 'servings' ? item.quantity : 0;
+                    {navMode === 'route' ? (
+                        <>
+                            {/* Capacity Monitor */}
+                            <div className="mb-6 bg-slate-900 rounded-3xl p-5 text-white shadow-xl">
+                                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4 flex items-center gap-2">
+                                    <Package size={14} /> Batch Capacity
+                                </h3>
 
-                                return (
-                                    <div
-                                        key={item._id}
-                                        onClick={() => {
-                                            if (isSelected) {
-                                                setSelectedPoints(selectedPoints.filter(p => p._id !== item._id));
-                                            } else {
-                                                // Validation check before selecting
-                                                const willExceedWeight = (currentLoad.weight + itemWeight) > capacity.maxWeight;
-                                                const willExceedServings = (currentLoad.servings + itemServings) > capacity.maxServings;
-
-                                                if (willExceedWeight || willExceedServings) {
-                                                    setError(`Adding this would exceed your ${willExceedWeight ? 'weight' : 'servings'} capacity!`);
-                                                    return;
-                                                }
-                                                setSelectedPoints([...selectedPoints, item]);
-                                                setError(null);
-                                            }
-                                        }}
-                                        className={`p-4 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-white border-gray-100 hover:border-emerald-200'}`}
-                                    >
-                                        <div className="flex justify-between items-start mb-1">
-                                            <h3 className="font-bold text-gray-900 text-sm truncate flex-1">{item.title}</h3>
-                                            <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                                                {item.distanceFromVolunteer} km
+                                <div className="space-y-4">
+                                    {/* Weight Progress */}
+                                    <div>
+                                        <div className="flex justify-between text-[10px] mb-1">
+                                            <span className="font-bold">TOTAL WEIGHT</span>
+                                            <span className={currentLoad.weight > capacity.maxWeight ? 'text-red-400' : 'text-emerald-400'}>
+                                                {currentLoad.weight} / {capacity.maxWeight} kg
                                             </span>
                                         </div>
-
-                                        <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-2">
-                                            <div className="flex items-center gap-1 font-semibold">
-                                                <Package size={10} className="text-gray-400" />
-                                                {item.quantity} {item.unit}
-                                            </div>
-                                            <div className="flex items-center gap-1 font-semibold">
-                                                <Users size={10} className="text-gray-400" />
-                                                Target: {item.claimedBy?.name || 'NGO'}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-1">
-                                            <MapPin size={12} className="text-gray-400" />
-                                            <p className="text-[10px] text-gray-500 truncate">{item.donor?.address || 'Pickup address unknown'}</p>
+                                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-500 ${currentLoad.weight > capacity.maxWeight ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                                style={{ width: `${Math.min((currentLoad.weight / (capacity.maxWeight || 1)) * 100, 100)}%` }}
+                                            ></div>
                                         </div>
                                     </div>
-                                );
-                            })}
+
+                                    {/* Servings Progress */}
+                                    <div>
+                                        <div className="flex justify-between text-[10px] mb-1">
+                                            <span className="font-bold">TOTAL SERVINGS</span>
+                                            <span className={currentLoad.servings > capacity.maxServings ? 'text-red-400' : 'text-emerald-400'}>
+                                                {currentLoad.servings} / {capacity.maxServings}
+                                            </span>
+                                        </div>
+                                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className={`h-full transition-all duration-500 ${currentLoad.servings > capacity.maxServings ? 'bg-red-500' : 'bg-blue-500'}`}
+                                                style={{ width: `${Math.min((currentLoad.servings / (capacity.maxServings || 1)) * 100, 100)}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {(currentLoad.weight > capacity.maxWeight || currentLoad.servings > capacity.maxServings) && (
+                                    <div className="mt-4 flex items-center gap-2 text-[10px] text-red-400 font-bold bg-red-400/10 p-2 rounded-lg border border-red-400/20">
+                                        <AlertTriangle size={12} />
+                                        <span>Capacity Exceeded!</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <h2 className="font-bold text-gray-700 mb-4 flex items-center gap-2">
+                                📦 Claimed Listings ({listings.length})
+                            </h2>
+                            {listings.length === 0 ? (
+                                <div className="bg-gray-50 p-6 rounded-2xl text-center border border-dashed border-gray-200">
+                                    <p className="text-sm text-gray-400 italic">No claimed listings within {capacity.radius}km.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {listings.map(item => {
+                                        const isSelected = selectedPoints.find(p => p._id === item._id);
+                                        const itemWeight = item.unit === 'kg' || item.unit === 'litres' ? item.quantity : 0;
+                                        const itemServings = item.unit === 'servings' ? item.quantity : 0;
+
+                                        return (
+                                            <div
+                                                key={item._id}
+                                                onClick={() => {
+                                                    if (isSelected) {
+                                                        setSelectedPoints(selectedPoints.filter(p => p._id !== item._id));
+                                                    } else {
+                                                        // Validation check before selecting
+                                                        const willExceedWeight = (currentLoad.weight + itemWeight) > capacity.maxWeight;
+                                                        const willExceedServings = (currentLoad.servings + itemServings) > capacity.maxServings;
+
+                                                        if (willExceedWeight || willExceedServings) {
+                                                            setError(`Adding this would exceed your ${willExceedWeight ? 'weight' : 'servings'} capacity!`);
+                                                            return;
+                                                        }
+                                                        setSelectedPoints([...selectedPoints, item]);
+                                                        setError(null);
+                                                    }
+                                                }}
+                                                className={`p-4 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-white border-gray-100 hover:border-emerald-200'}`}
+                                            >
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h3 className="font-bold text-gray-900 text-sm truncate flex-1">{item.title}</h3>
+                                                    <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                                                        {item.distanceFromVolunteer} km
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-3 text-[10px] text-gray-500 mb-2">
+                                                    <div className="flex items-center gap-1 font-semibold">
+                                                        <Package size={10} className="text-gray-400" />
+                                                        {item.quantity} {item.unit}
+                                                    </div>
+                                                    <div className="flex items-center gap-1 font-semibold">
+                                                        <Users size={10} className="text-gray-400" />
+                                                        Target: {item.claimedBy?.name || 'NGO'}
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-1">
+                                                    <MapPin size={12} className="text-gray-400" />
+                                                    <p className="text-[10px] text-gray-500 truncate">{item.donor?.address || 'Pickup address unknown'}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between mb-2">
+                                <h2 className="font-bold text-gray-700">Turn-by-Turn</h2>
+                                <button
+                                    onClick={() => setAutoTrack(!autoTrack)}
+                                    className={`px-3 py-1 rounded-full text-[10px] font-black uppercase transition-all ${autoTrack ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-400'}`}
+                                >
+                                    {autoTrack ? '🛰️ Live Tracking ON' : 'Enable Live GPS'}
+                                </button>
+                            </div>
+
+                            {/* Active Instruction Card */}
+                            {navigationSteps[activeStepIndex] && (
+                                <div className="bg-emerald-800 text-white p-6 rounded-[2rem] shadow-xl relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-3xl -translate-x-1/4 -translate-y-1/4"></div>
+                                    <div className="flex items-start gap-4 mb-4 relative z-10">
+                                        <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
+                                            {getTurnIcon(navigationSteps[activeStepIndex].type)}
+                                        </div>
+                                        <div>
+                                            <p className="text-emerald-300 text-[10px] font-black uppercase tracking-widest">In {(navigationSteps[activeStepIndex].distance / 1000).toFixed(1)} km</p>
+                                            <h3 className="text-lg font-bold leading-tight mt-1">{navigationSteps[activeStepIndex].instruction}</h3>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 relative z-10">
+                                        <button
+                                            disabled={activeStepIndex === 0}
+                                            onClick={() => setActiveStepIndex(s => s - 1)}
+                                            className="flex-1 py-2 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-xs disabled:opacity-30"
+                                        >
+                                            Previous
+                                        </button>
+                                        <button
+                                            disabled={activeStepIndex === navigationSteps.length - 1}
+                                            onClick={() => setActiveStepIndex(s => s + 1)}
+                                            className="flex-1 py-2 bg-white text-emerald-800 rounded-xl font-bold text-xs disabled:opacity-30"
+                                        >
+                                            Next Step
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Scrollable Steps List */}
+                            <div className="space-y-2 mt-4 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                                {navigationSteps.map((step, idx) => (
+                                    <div
+                                        key={idx}
+                                        onClick={() => setActiveStepIndex(idx)}
+                                        className={`p-3 rounded-2xl border transition-all cursor-pointer ${idx === activeStepIndex ? 'bg-emerald-50 border-emerald-500 shadow-sm' : 'bg-gray-50 border-transparent hover:bg-gray-100'}`}
+                                    >
+                                        <div className="flex gap-3">
+                                            <div className={`${idx === activeStepIndex ? 'text-emerald-600' : 'text-gray-400'}`}>
+                                                {getTurnIcon(step.type)}
+                                            </div>
+                                            <div>
+                                                <p className={`text-[11px] font-bold ${idx === activeStepIndex ? 'text-emerald-900' : 'text-gray-700'}`}>{step.instruction}</p>
+                                                <p className="text-[10px] text-gray-500 mt-0.5">{(step.distance / 1000).toFixed(1)} km</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
@@ -421,9 +571,21 @@ const RouteOptimization = () => {
                         {optimizedRoute && (
                             <Polyline
                                 positions={optimizedRoute.features[0].geometry.coordinates.map(c => [c[1], c[0]])}
+                                color="#1e293b"
+                                weight={3}
+                                opacity={0.4}
+                            />
+                        )}
+
+                        {/* Highlight Active Step */}
+                        {optimizedRoute && navigationSteps[activeStepIndex] && (
+                            <Polyline
+                                positions={optimizedRoute.features[0].geometry.coordinates
+                                    .slice(navigationSteps[activeStepIndex].way_points[0], navigationSteps[activeStepIndex].way_points[1] + 1)
+                                    .map(c => [c[1], c[0]])}
                                 color="#059669"
-                                weight={5}
-                                opacity={0.7}
+                                weight={8}
+                                opacity={1}
                             />
                         )}
 

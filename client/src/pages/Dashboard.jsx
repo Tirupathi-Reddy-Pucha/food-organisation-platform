@@ -9,7 +9,7 @@ import L from 'leaflet';
 import { calculateDistance } from '../utils/haversine';
 
 // Icons for the Dashboard UI
-import { LayoutDashboard, Heart, History, UserCircle, PlusCircle, LogOut, Bell, ShieldAlert, MapPin, CheckCircle2, Clock, Menu, X, Info, Leaf, Trash2, HelpCircle, Navigation } from 'lucide-react';
+import { LayoutDashboard, Heart, History, UserCircle, PlusCircle, LogOut, Bell, ShieldAlert, MapPin, CheckCircle2, Clock, Menu, X, Info, Leaf, Trash2, HelpCircle, Navigation, RefreshCw, Camera, Mic, MicOff, Star, Search, ShieldCheck, BadgeCheck, Zap } from 'lucide-react';
 
 // Import Leaflet Images (Vite/Webpack compatible)
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';

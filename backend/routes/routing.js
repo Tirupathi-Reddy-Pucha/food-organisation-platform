@@ -66,7 +66,8 @@ router.post('/optimize', async (req, res) => {
 
         // Get the full polyline for the optimized route
         const directionsResponse = await axios.post('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
-            coordinates: optimizedCoords.map(c => [c.lng, c.lat])
+            coordinates: optimizedCoords.map(c => [c.lng, c.lat]),
+            instructions: true
         }, {
             headers: {
                 'Authorization': apiKey,
