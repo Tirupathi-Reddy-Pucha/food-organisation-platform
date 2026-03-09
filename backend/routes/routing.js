@@ -12,7 +12,7 @@ const router = express.Router();
  * @access  Private (or Public depending on your auth setup)
  */
 router.post('/optimize', async (req, res) => {
-    const { coordinates } = req.body;
+    const { coordinates, preference = 'fastest' } = req.body;
 
     if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
         return res.status(400).json({ message: 'At least two coordinates are required' });
@@ -67,7 +67,8 @@ router.post('/optimize', async (req, res) => {
         // Get the full polyline for the optimized route
         const directionsResponse = await axios.post('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
             coordinates: optimizedCoords.map(c => [c.lng, c.lat]),
-            instructions: true
+            instructions: true,
+            preference: preference === 'eco' ? 'recommended' : preference // 'eco' maps to 'recommended' for better efficiency
         }, {
             headers: {
                 'Authorization': apiKey,

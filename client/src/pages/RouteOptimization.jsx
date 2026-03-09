@@ -44,6 +44,13 @@ const RouteOptimization = () => {
     const [activeStepIndex, setActiveStepIndex] = useState(0);
     const [autoTrack, setAutoTrack] = useState(false);
 
+    // ETA & Real-time Stats
+    const [etaInfo, setEtaInfo] = useState({
+        remainingDistance: 0,
+        remainingDuration: 0,
+        arrivalTime: null
+    });
+
     // Capacity & Range State
     const [capacity, setCapacity] = useState({
         maxWeight: parseFloat(localStorage.getItem('user_maxWeight') || '0'),
@@ -52,6 +59,7 @@ const RouteOptimization = () => {
     });
 
     const [currentLoad, setCurrentLoad] = useState({ weight: 0, servings: 0 });
+    const [routePreference, setRoutePreference] = useState('fastest'); // fastest, shortest, eco
 
     useEffect(() => {
         const userId = localStorage.getItem('user_id');
@@ -82,19 +90,7 @@ const RouteOptimization = () => {
             watchId = navigator.geolocation.watchPosition(
                 (pos) => {
                     const { latitude, longitude } = pos.coords;
-                    // Find nearest instruction waypoint (simplified)
-                    let minIdx = 0;
-                    let minDist = 99999;
-                    navigationSteps.forEach((step, idx) => {
-                        const d = calculateDistance(latitude, longitude, step.location[1], step.location[0]);
-                        if (d < minDist) {
-                            minDist = d;
-                            minIdx = idx;
-                        }
-                    });
-                    if (minDist < 0.1) { // 100 meters
-                        setActiveStepIndex(minIdx);
-                    }
+                    updateRealTimeStats(latitude, longitude);
                 },
                 (err) => console.error(err),
                 { enableHighAccuracy: true }
@@ -102,6 +98,54 @@ const RouteOptimization = () => {
         }
         return () => navigator.geolocation.clearWatch(watchId);
     }, [autoTrack, navigationSteps]);
+
+    const updateRealTimeStats = (lat, lng) => {
+        if (!navigationSteps.length || !stats.fullCoords.length) return;
+
+        // 1. Update position
+        if (autoTrack) {
+            setUserLocation({ lat, lng });
+        }
+
+        // 2. Find nearest instruction waypoint to update active branch
+        let minIdx = 0;
+        let minDist = 99999;
+        navigationSteps.forEach((step, idx) => {
+            const d = calculateDistance(lat, lng, step.location[1], step.location[0]);
+            if (d < minDist) {
+                minDist = d;
+                minIdx = idx;
+            }
+        });
+
+        // Update active step if close enough
+        if (minDist < 0.2) { // 200 meters scope
+            setActiveStepIndex(minIdx);
+        }
+
+        // 3. Calculate Remaining Distance & Duration
+        // Find which step we are currently in or approaching
+        let remainingD = 0;
+        let remainingT = 0;
+
+        for (let i = minIdx; i < navigationSteps.length; i++) {
+            remainingD += navigationSteps[i].distance;
+            remainingT += navigationSteps[i].duration;
+        }
+
+        const distKm = (remainingD / 1000).toFixed(2);
+        const durationMin = (remainingT / 60).toFixed(0);
+
+        // 4. Calculate Arrival Time
+        const now = new Date();
+        const arrival = new Date(now.getTime() + (remainingT * 1000));
+
+        setEtaInfo({
+            remainingDistance: distKm,
+            remainingDuration: durationMin,
+            arrivalTime: arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
+    };
 
     // Fetch listings when userLocation or radius changes
     useEffect(() => {
@@ -180,7 +224,10 @@ const RouteOptimization = () => {
                 }
             });
 
-            const res = await axios.post(`${API_BASE_URL}/routing/optimize`, { coordinates: uniqueCoords });
+            const res = await axios.post(`${API_BASE_URL}/routing/optimize`, {
+                coordinates: uniqueCoords,
+                preference: routePreference
+            });
 
             setOptimizedRoute(res.data.geojson);
             const dist = parseFloat(res.data.totalDistance) || 0;
@@ -206,6 +253,16 @@ const RouteOptimization = () => {
                 sequence: res.data.optimizedSequence,
                 fullCoords: uniqueCoords
             });
+
+            // Set initial ETA
+            const now = new Date();
+            const arrival = new Date(now.getTime() + (dur * 1000));
+            setEtaInfo({
+                remainingDistance: (dist / 1000).toFixed(2),
+                remainingDuration: (dur / 60).toFixed(0),
+                arrivalTime: arrival.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            });
+
             setActiveStepIndex(0);
         } catch (err) {
             console.error('Optimization error:', err);
@@ -263,11 +320,23 @@ const RouteOptimization = () => {
                     </h1>
                     <p className="text-sm text-gray-500">Pickups from donors ➔ Drop-offs to NGOs</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
+                    <div className="flex flex-col">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 ml-1">Route Preference</label>
+                        <select
+                            value={routePreference}
+                            onChange={(e) => setRoutePreference(e.target.value)}
+                            className="bg-gray-50 border border-gray-200 text-gray-700 text-sm font-bold rounded-xl px-4 py-2 focus:ring-2 focus:ring-emerald-500 outline-none transition-all cursor-pointer"
+                        >
+                            <option value="fastest">⚡ Fastest Route</option>
+                            <option value="shortest">📏 Shortest Distance</option>
+                            <option value="eco">🌱 Fuel Efficient (Eco)</option>
+                        </select>
+                    </div>
                     <button
                         onClick={handleOptimize}
                         disabled={loading || selectedPoints.length === 0}
-                        className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2"
+                        className="bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-2 mt-5"
                     >
                         {loading ? 'Calculating...' : 'Optimize Full Delivery Route'}
                     </button>
@@ -474,19 +543,49 @@ const RouteOptimization = () => {
                     )}
 
                     {stats.distance > 0 && (
-                        <div className="mt-8 bg-emerald-900 text-white p-6 rounded-3xl shadow-xl">
-                            <h3 className="font-black text-lg mb-4 flex items-center gap-2">
-                                <Clock size={20} /> Route Stats
+                        <div className="mt-8 bg-emerald-900 text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
+                            <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/5 rounded-full blur-2xl"></div>
+
+                            <h3 className="font-black text-lg mb-4 flex items-center gap-2 relative z-10 text-emerald-100">
+                                <Clock size={20} className="text-emerald-400" />
+                                {navMode === 'navigation' ? 'Live Progress' : 'Route Summary'}
                             </h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider">Distance</p>
-                                    <p className="text-2xl font-black">{stats.distance} <span className="text-sm font-normal">km</span></p>
+
+                            <div className="space-y-6 relative z-10">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                                            {navMode === 'navigation' ? 'Remaining Dist.' : 'Total Distance'}
+                                        </p>
+                                        <p className="text-2xl font-black tracking-tighter">
+                                            {navMode === 'navigation' ? etaInfo.remainingDistance : stats.distance}
+                                            <span className="text-xs font-bold text-emerald-400 ml-1 uppercase">km</span>
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <p className="text-emerald-400 text-[10px] font-black uppercase tracking-widest mb-1">
+                                            {navMode === 'navigation' ? 'Remaining Time' : 'Total Duration'}
+                                        </p>
+                                        <p className="text-2xl font-black tracking-tighter">
+                                            {navMode === 'navigation' ? etaInfo.remainingDuration : stats.duration}
+                                            <span className="text-xs font-bold text-emerald-400 ml-1 uppercase">min</span>
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-emerald-300 text-[10px] font-bold uppercase tracking-wider">Duration</p>
-                                    <p className="text-2xl font-black">{stats.duration} <span className="text-sm font-normal">min</span></p>
-                                </div>
+
+                                {navMode === 'navigation' && etaInfo.arrivalTime && (
+                                    <div className="pt-4 border-t border-emerald-800/50">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-emerald-400 text-[10px] font-black uppercase tracking-widest">Est. Arrival</p>
+                                            <div className="bg-emerald-400/20 text-emerald-300 px-3 py-1 rounded-full text-[10px] font-black animate-pulse">
+                                                LIVE
+                                            </div>
+                                        </div>
+                                        <p className="text-3xl font-black tracking-tighter mt-1 text-white">
+                                            {etaInfo.arrivalTime}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -508,10 +607,23 @@ const RouteOptimization = () => {
                         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
                         {userLocation && (
-                            <Marker position={[userLocation.lat, userLocation.lng]} icon={volunteerIcon}>
+                            <Marker
+                                position={[userLocation.lat, userLocation.lng]}
+                                icon={volunteerIcon}
+                                draggable={!autoTrack}
+                                eventHandlers={{
+                                    dragend: (e) => {
+                                        const marker = e.target;
+                                        const position = marker.getLatLng();
+                                        setUserLocation({ lat: position.lat, lng: position.lng });
+                                        updateRealTimeStats(position.lat, position.lng);
+                                    },
+                                }}
+                            >
                                 <Popup>
                                     <div className="font-bold">You are here</div>
                                     <div className="text-xs">Starting Point (Profile Location)</div>
+                                    {!autoTrack && <div className="text-[10px] text-orange-600 font-bold mt-1">Manual Mode: marker is draggable</div>}
                                 </Popup>
                             </Marker>
                         )}
