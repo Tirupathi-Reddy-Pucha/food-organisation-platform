@@ -168,7 +168,7 @@ export default function Login() {
             <h3 className="text-2xl font-bold text-white mb-4 leading-snug">
               "GiveBite transformed how we handle our surplus. It’s not just a platform; it’s a vital logistics network."
             </h3>
-            <p className="text-emerald-100 font-medium">— Sarah Jenkins, Operations Director</p>
+            <p className="text-emerald-100 font-medium">— Tirupathi Reddy Pucha, Operations Director</p>
           </div>
         </div>
       </div>

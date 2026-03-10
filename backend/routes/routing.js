@@ -24,51 +24,39 @@ router.post('/optimize', async (req, res) => {
     }
 
     try {
-        // ORS Optimization API (VRP)
-        // https://openrouteservice.org/dev/#/api-docs/optimization/post
+        // 1. Separate coordinates to enforce Volunteer -> Pickups -> NGOs sequence
+        // coordinates[0] is always the volunteer
+        const volunteer = coordinates[0];
+        const otherCoords = coordinates.slice(1);
 
-        // Prepare jobs for ORS
-        const jobs = coordinates.map((coord, index) => ({
-            id: index + 1,
-            location: [coord.lng, coord.lat], // ORS uses [lng, lat]
-            service: 120 // mock service time in seconds
-        }));
+        let pickups = otherCoords.filter(c => c.type === 'pickup');
+        let ngos = otherCoords.filter(c => c.type === 'ngo');
 
-        // We assume the first point is the start and end (Return to base)
-        // Or we can define a separate vehicle with start/end
-        const vehicle = {
-            id: 1,
-            profile: 'driving-car',
-            start: [coordinates[0].lng, coordinates[0].lat],
-            end: [coordinates[0].lng, coordinates[0].lat]
-        };
+        // Fallback if frontend didn't supply types (e.g. legacy request)
+        if (pickups.length === 0 && ngos.length === 0) {
+            pickups = otherCoords;
+        }
 
-        const response = await axios.post('https://api.openrouteservice.org/optimization', {
-            jobs,
-            vehicles: [vehicle]
-        }, {
-            headers: {
-                'Authorization': apiKey,
-                'Content-Type': 'application/json'
-            }
+        // 2. Ordered coordinates: Volunteer -> Pickups -> NGOs
+        const orderedCoords = [volunteer, ...pickups, ...ngos];
+
+        // 3. Create mock 'optimizedSequence' for the frontend marker compatibility
+        // The frontend expects: { type: 'start' }, { type: 'job', id: X }...
+        // Where `id` maps to the ORIGINAL coordinates array index + 1
+        const optimizedSequence = [];
+        optimizedSequence.push({ type: 'start' });
+
+        orderedCoords.slice(1).forEach((coord) => {
+            const originalIndex = coordinates.indexOf(coord);
+            optimizedSequence.push({ type: 'job', id: originalIndex + 1 });
         });
+        optimizedSequence.push({ type: 'end' }); // Mark end
 
-        const result = response.data;
-        console.log('ORS Optimization Summary:', result.summary);
-
-        const optimizedSteps = result.routes[0].steps;
-        const optimizedCoords = optimizedSteps.map(step => {
-            if (step.type === 'job') {
-                return coordinates[step.id - 1];
-            }
-            return coordinates[0]; // start/end
-        });
-
-        // Get the full polyline for the optimized route
+        // 4. Get the full polyline for the physically sequential route
         const directionsResponse = await axios.post('https://api.openrouteservice.org/v2/directions/driving-car/geojson', {
-            coordinates: optimizedCoords.map(c => [c.lng, c.lat]),
+            coordinates: orderedCoords.map(c => [c.lng, c.lat]),
             instructions: true,
-            preference: preference === 'eco' ? 'recommended' : preference // 'eco' maps to 'recommended' for better efficiency
+            preference: preference === 'eco' ? 'recommended' : preference // 'eco' maps to 'recommended'
         }, {
             headers: {
                 'Authorization': apiKey,
@@ -78,18 +66,14 @@ router.post('/optimize', async (req, res) => {
 
         const dirData = directionsResponse.data;
         const dirSummary = dirData.features?.[0]?.properties?.summary || {};
-        console.log('ORS Directions Summary:', dirSummary);
-
-        // Fallback: If optimization result distance is missing, use directions distance
-        const finalDistance = result.summary.distance || dirSummary.distance || 0;
-        const finalDuration = result.summary.duration || dirSummary.duration || 0;
+        console.log('ORS Sequential Directions Summary:', dirSummary);
 
         res.json({
-            summary: result.summary,
-            optimizedSequence: result.routes[0].steps,
+            summary: dirSummary,
+            optimizedSequence: optimizedSequence,
             geojson: dirData,
-            totalDistance: finalDistance,
-            totalDuration: finalDuration
+            totalDistance: dirSummary.distance || 0,
+            totalDuration: dirSummary.duration || 0
         });
 
     } catch (error) {
