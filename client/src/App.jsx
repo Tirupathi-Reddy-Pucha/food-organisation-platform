@@ -12,6 +12,7 @@ import Blog from './pages/Blog';
 import Contact from './pages/Contact';
 import Restaurants from './pages/solutions/Restaurants';
 import RouteOptimization from './pages/RouteOptimization';
+import ForgotPassword from './pages/ForgotPassword';
 
 // Protects the Dashboard: If no token, kick to Login
 const ProtectedRoute = ({ children }) => {
@@ -101,6 +102,7 @@ export default function App() {
 
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
           <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+          <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
 
           {/* --- PROTECTED ROUTE (Logged In Only) --- */}
           <Route path="/dashboard" element={

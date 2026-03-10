@@ -14,13 +14,22 @@ export default function Register() {
   const API_URL = `${import.meta.env.VITE_API_BASE_URL}` || "http://localhost:5000/api";
 
   const [formData, setFormData] = useState({
-    name: "", email: "", password: "", phone: "", address: "", ngoNumb: "", agreeTerms: false, agreeConduct: false
+    name: "", email: "", password: "", phone: "", address: "", ngoNumb: "",
+    securityQuestion: "", securityAnswer: "", agreeTerms: false, agreeConduct: false
   });
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
+
+  const securityQuestionsList = [
+    "What was your childhood pet's name?",
+    "What city were you born in?",
+    "What is your mother's maiden name?",
+    "What was the name of your first school?",
+    "What is your favorite book?"
+  ];
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -41,7 +50,9 @@ export default function Register() {
         role: role,
         phone: formData.phone,
         address: formData.address,
-        ngoRegNumber: formData.ngoNumb
+        ngoRegNumber: formData.ngoNumb,
+        securityQuestion: formData.securityQuestion,
+        securityAnswer: formData.securityAnswer
       };
 
       const res = await axios.post(`${API_URL}/auth/register`, payload);
@@ -202,6 +213,29 @@ export default function Register() {
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
                 placeholder="123 Main St, City, Zip"
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Security Question <span className="text-gray-400 font-normal">(For Password Reset)</span></label>
+                <select
+                  name="securityQuestion" required value={formData.securityQuestion} onChange={handleChange} disabled={isLoading}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50 text-gray-700"
+                >
+                  <option value="" disabled>Select a question...</option>
+                  {securityQuestionsList.map((q, idx) => (
+                    <option key={idx} value={q}>{q}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Security Answer</label>
+                <input
+                  type="password" name="securityAnswer" required value={formData.securityAnswer} onChange={handleChange} disabled={isLoading}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 outline-none transition-all disabled:opacity-50"
+                  placeholder="Your answer"
+                />
+              </div>
             </div>
 
             <AnimatePresence mode="popLayout">

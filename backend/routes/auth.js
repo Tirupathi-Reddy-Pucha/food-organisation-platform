@@ -15,10 +15,17 @@ const router = express.Router();
 router.post('/register', async (req, res) => {
     try {
         // ADDED location and serviceRadius
-        const { name, email, password, role, phone, address, ngoRegNumber, location, serviceRadius } = req.body;
+        const { name, email, password, role, phone, address, ngoRegNumber, location, serviceRadius, securityQuestion, securityAnswer } = req.body;
 
         let user = await User.findOne({ email });
         if (user) return res.status(400).json({ msg: 'User already exists' });
+
+        // Hash security answer if provided (for additional security)
+        let hashedSecurityAnswer = '';
+        if (securityAnswer) {
+            const answerSalt = await bcrypt.genSalt(10);
+            hashedSecurityAnswer = await bcrypt.hash(securityAnswer.toLowerCase().trim(), answerSalt);
+        }
 
         user = new User({
             name,
@@ -29,7 +36,9 @@ router.post('/register', async (req, res) => {
             address,
             ngoRegNumber,
             location,          // NEW
-            serviceRadius      // NEW
+            serviceRadius,     // NEW
+            securityQuestion: securityQuestion || '',
+            securityAnswer: hashedSecurityAnswer
         });
 
         const salt = await bcrypt.genSalt(10);
@@ -261,6 +270,62 @@ router.delete('/delete', auth, async (req, res) => {
     }
 });
 
+
+// ==========================================
+// 8. FORGOT PASSWORD ROUTES
+// ==========================================
+
+// @route   POST /api/auth/forgot-password/check-email
+router.post('/forgot-password/check-email', async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ email });
+
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
+
+        if (!user.securityQuestion) {
+            return res.status(400).json({ msg: 'No security question is set for this account. Please contact support.' });
+        }
+
+        res.json({ securityQuestion: user.securityQuestion });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST /api/auth/forgot-password/reset
+router.post('/forgot-password/reset', async (req, res) => {
+    try {
+        const { email, securityAnswer, newPassword } = req.body;
+
+        const user = await User.findOne({ email });
+        if (!user) return res.status(404).json({ msg: 'User not found' });
+
+        if (!user.securityQuestion || !user.securityAnswer) {
+            return res.status(400).json({ msg: 'No security question is set for this account.' });
+        }
+
+        // Compare answer
+        const isMatch = await bcrypt.compare(securityAnswer.toLowerCase().trim(), user.securityAnswer);
+        if (!isMatch) {
+            return res.status(400).json({ msg: 'Incorrect security answer.' });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(newPassword, salt);
+
+        await user.save();
+
+        res.json({ msg: 'Password has been reset successfully. You can now log in.' });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
 
 // ==========================================
 // ADMIN: UNBAN USER

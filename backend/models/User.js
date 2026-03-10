@@ -6,6 +6,10 @@ const UserSchema = new mongoose.Schema({
   password: { type: String, required: true },
   role: { type: String, enum: ['Donor', 'NGO', 'Volunteer', 'Admin'], default: 'Donor' },
 
+  // Security Question (for password reset)
+  securityQuestion: { type: String, default: '' },
+  securityAnswer: { type: String, default: '' },
+
   // Contact Info
   phone: { type: String, default: '' },
   address: { type: String, default: '' },
