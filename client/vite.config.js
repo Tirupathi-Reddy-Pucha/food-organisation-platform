@@ -9,6 +9,12 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: './src/setupTests.jsx',
-    css: true,
+    css: false,
+    include: ['src/tests/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    server: {
+      deps: {
+        inline: ['framer-motion']
+      }
+    }
   },
 })
